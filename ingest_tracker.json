@@ -1,0 +1,1667 @@
+{
+  "class_10/english/jeff101.pdf": {
+    "hash": "cd26b9767fb08cb346c3d4ebcd200776",
+    "ingested_at": "2026-06-25T06:40:23.038395",
+    "chunks": 48,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jeff101.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jeff102.pdf": {
+    "hash": "abed1e37fc912b263746fef09b6f34a1",
+    "ingested_at": "2026-06-25T06:41:31.217487",
+    "chunks": 55,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jeff102.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jeff103.pdf": {
+    "hash": "d853dfc6f4df121fd587d33f8fa86ff7",
+    "ingested_at": "2026-06-25T06:42:23.458500",
+    "chunks": 46,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jeff103.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jeff104.pdf": {
+    "hash": "e4432026d8c39083b5adb34133d40cad",
+    "ingested_at": "2026-06-25T06:43:34.287405",
+    "chunks": 57,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jeff104.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jeff105.pdf": {
+    "hash": "b87a939d13ecec2c68767915fa7d9673",
+    "ingested_at": "2026-06-25T06:44:41.018776",
+    "chunks": 59,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jeff105.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jeff106.pdf": {
+    "hash": "0f6d8f55b27117190b34c565308d2406",
+    "ingested_at": "2026-06-25T06:45:39.147034",
+    "chunks": 51,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jeff106.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jeff107.pdf": {
+    "hash": "a4d6b836163cb8cd42f4d58619634cfc",
+    "ingested_at": "2026-06-25T06:46:36.757017",
+    "chunks": 54,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jeff107.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jeff108.pdf": {
+    "hash": "4bb36ab8d6368538aba96bfb86752879",
+    "ingested_at": "2026-06-25T06:47:11.888934",
+    "chunks": 33,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jeff108.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jeff109.pdf": {
+    "hash": "610c3ac0434e514ec42256bfb9c224ec",
+    "ingested_at": "2026-06-25T06:48:45.035097",
+    "chunks": 84,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jeff109.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jeff1ps.pdf": {
+    "hash": "05de8eb34e2e2349b142760e62eb4cf0",
+    "ingested_at": "2026-06-25T06:49:16.737366",
+    "chunks": 35,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jeff1ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jefp101.pdf": {
+    "hash": "dd0a0f41bd42a981d0348840f8b642e6",
+    "ingested_at": "2026-06-25T06:49:42.840845",
+    "chunks": 23,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jefp101.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jefp102.pdf": {
+    "hash": "e95f15670721c9dadb2703aeb94afca1",
+    "ingested_at": "2026-06-25T06:50:02.313736",
+    "chunks": 20,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jefp102.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jefp103.pdf": {
+    "hash": "ca52c7f1fe13a5f15635ee3174cc55dd",
+    "ingested_at": "2026-06-25T06:50:20.040092",
+    "chunks": 19,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jefp103.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jefp104.pdf": {
+    "hash": "3d779b9dd375f1190b895c73c362c947",
+    "ingested_at": "2026-06-25T06:50:36.596262",
+    "chunks": 19,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jefp104.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jefp105.pdf": {
+    "hash": "8076e225bb2db6c713debf7a2f07d373",
+    "ingested_at": "2026-06-25T06:50:54.111833",
+    "chunks": 21,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jefp105.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jefp106.pdf": {
+    "hash": "9363cff611f7fef497db7bc0b0590ff7",
+    "ingested_at": "2026-06-25T06:51:20.590734",
+    "chunks": 31,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jefp106.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jefp107.pdf": {
+    "hash": "887cd2eceef328ee98d4b276afbde3f4",
+    "ingested_at": "2026-06-25T06:51:48.687061",
+    "chunks": 32,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jefp107.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jefp108.pdf": {
+    "hash": "ff60b7778427fd5ebf27e9a59e8db533",
+    "ingested_at": "2026-06-25T06:52:17.713800",
+    "chunks": 33,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jefp108.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jefp109.pdf": {
+    "hash": "168d9a6192c1be94e10978114321be7c",
+    "ingested_at": "2026-06-25T06:52:55.713486",
+    "chunks": 45,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jefp109.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jefp1ps.pdf": {
+    "hash": "912a80d71c9eb95a1e97460b4c7ec294",
+    "ingested_at": "2026-06-25T06:53:23.097838",
+    "chunks": 37,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jefp1ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jewe201.pdf": {
+    "hash": "e4b20ffaf42c7033f8718520fe10f710",
+    "ingested_at": "2026-06-25T06:54:21.888058",
+    "chunks": 51,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jewe201.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jewe202.pdf": {
+    "hash": "365178ef3fd432111098a0aa3dd07e6e",
+    "ingested_at": "2026-06-25T06:55:24.936187",
+    "chunks": 48,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jewe202.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jewe203.pdf": {
+    "hash": "5b4a84283277cc273776c25f247ad3c8",
+    "ingested_at": "2026-06-25T06:56:28.095917",
+    "chunks": 47,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jewe203.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jewe204..pdf": {
+    "hash": "4b7ba94ec382bca0a1825d44e4a9bc09",
+    "ingested_at": "2026-06-25T06:57:28.606935",
+    "chunks": 45,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jewe204..pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jewe205.pdf": {
+    "hash": "8a34128d9d5a5cc729a88e762eb3252b",
+    "ingested_at": "2026-06-25T06:58:54.868027",
+    "chunks": 62,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jewe205.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jewe206.pdf": {
+    "hash": "f9d4d280032e71417e5bb78bfa35ea3c",
+    "ingested_at": "2026-06-25T07:00:50.158067",
+    "chunks": 75,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jewe206.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jewe207.pdf": {
+    "hash": "e29102fb459abd5c7ce013d3eb0453e6",
+    "ingested_at": "2026-06-25T07:02:05.132031",
+    "chunks": 54,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jewe207.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jewe208.pdf": {
+    "hash": "45338a49caf007bef52d13e9fe58d6d6",
+    "ingested_at": "2026-06-25T07:03:27.797605",
+    "chunks": 55,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jewe208.pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jewe209..pdf": {
+    "hash": "af1540c27f95bc70743a1352bf366ce0",
+    "ingested_at": "2026-06-25T07:05:06.456553",
+    "chunks": 67,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jewe209..pdf",
+    "images_extracted": true
+  },
+  "class_10/english/jewe2ps.pdf": {
+    "hash": "e4a16be8edc404e1d0419b3a21400d4c",
+    "ingested_at": "2026-06-25T07:05:42.180936",
+    "chunks": 46,
+    "class": "class_10",
+    "subject": "english",
+    "filename": "jewe2ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh101.pdf": {
+    "hash": "873881db09725fbcea64d12d52a1d9c1",
+    "ingested_at": "2026-06-25T07:44:36.827585",
+    "chunks": 34,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh101.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh102.pdf": {
+    "hash": "cd8c75df1d502dcb6ca15b837d6ee48c",
+    "ingested_at": "2026-06-25T07:45:06.058695",
+    "chunks": 36,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh102.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh103.pdf": {
+    "hash": "cc24b6f003ea30137caedadda5c88b8a",
+    "ingested_at": "2026-06-25T07:45:43.221251",
+    "chunks": 47,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh103.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh104.pdf": {
+    "hash": "f217e61108c071bece83c583c97ed84f",
+    "ingested_at": "2026-06-25T07:46:16.227422",
+    "chunks": 37,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh104.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh105.pdf": {
+    "hash": "06813661d252a5acda406a6d48f4b534",
+    "ingested_at": "2026-06-25T07:47:21.548492",
+    "chunks": 75,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh105.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh106.pdf": {
+    "hash": "2a1fc87966379207ff7d42c00ebb3080",
+    "ingested_at": "2026-06-25T07:48:13.754529",
+    "chunks": 68,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh106.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh107.pdf": {
+    "hash": "cd9b8f2f931c14f916025c2caab3251f",
+    "ingested_at": "2026-06-25T07:48:51.754147",
+    "chunks": 43,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh107.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh108.pdf": {
+    "hash": "204e6984f06c28e34e7271991a9c2f1f",
+    "ingested_at": "2026-06-25T07:49:37.995857",
+    "chunks": 54,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh108.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh109.pdf": {
+    "hash": "4d43e7442bcf2cc17ffafed010125fb4",
+    "ingested_at": "2026-06-25T07:50:00.675466",
+    "chunks": 30,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh109.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh110.pdf": {
+    "hash": "86a8b48569599fa309baa30323b02912",
+    "ingested_at": "2026-06-25T07:50:23.532347",
+    "chunks": 31,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh110.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh111.pdf": {
+    "hash": "f3ac9604bf107525b6698c2a88185b18",
+    "ingested_at": "2026-06-25T07:50:37.674940",
+    "chunks": 18,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh111.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh112.pdf": {
+    "hash": "cde6843341d6b906e0d17450479e6773",
+    "ingested_at": "2026-06-25T07:51:05.294972",
+    "chunks": 34,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh112.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh113.pdf": {
+    "hash": "aad2915f53291a2b28735519044d1083",
+    "ingested_at": "2026-06-25T07:52:09.955537",
+    "chunks": 83,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh113.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh114.pdf": {
+    "hash": "96b122935e5c8dbfea5a4a849074657b",
+    "ingested_at": "2026-06-25T07:52:49.470737",
+    "chunks": 54,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh114.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh1a1.pdf": {
+    "hash": "153c790b716b8c8ec5f15e8f7c97f1ae",
+    "ingested_at": "2026-06-25T07:53:44.035384",
+    "chunks": 77,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh1a1.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh1a2.pdf": {
+    "hash": "ac75bb604488608dabb24dd57ce6a4ed",
+    "ingested_at": "2026-06-25T07:54:12.300747",
+    "chunks": 42,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh1a2.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh1an.pdf": {
+    "hash": "5613c1c5056f657b41669c3c7a23a54a",
+    "ingested_at": "2026-06-25T07:54:45.052145",
+    "chunks": 34,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh1an.pdf",
+    "images_extracted": true
+  },
+  "class_10/mathematics/jemh1ps.pdf": {
+    "hash": "759cb866f4d9640eeda93992ae50c5cc",
+    "ingested_at": "2026-06-25T07:55:12.544277",
+    "chunks": 43,
+    "class": "class_10",
+    "subject": "mathematics",
+    "filename": "jemh1ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc101.pdf": {
+    "hash": "0175db0bd5cdbf2b84e3559ec66c7043",
+    "ingested_at": "2026-06-25T07:56:09.694110",
+    "chunks": 66,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc101.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc102.pdf": {
+    "hash": "7617a5996dc8b7c2020e747c06739ee6",
+    "ingested_at": "2026-06-25T07:57:20.705851",
+    "chunks": 81,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc102.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc103.pdf": {
+    "hash": "9c7a317317085807a4e912f03cf39995",
+    "ingested_at": "2026-06-25T07:58:32.103271",
+    "chunks": 91,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc103.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc104.pdf": {
+    "hash": "dd7cc6c6477282a844d0e5fd3b4fce3d",
+    "ingested_at": "2026-06-25T07:59:51.348726",
+    "chunks": 95,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc104.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc105.pdf": {
+    "hash": "2f06672b5af5ac910062f521e6459d22",
+    "ingested_at": "2026-06-25T08:01:10.238647",
+    "chunks": 108,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc105.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc106.pdf": {
+    "hash": "9282b690901dfa7ed4ea21d08d7081af",
+    "ingested_at": "2026-06-25T08:01:55.494241",
+    "chunks": 65,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc106.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc107.pdf": {
+    "hash": "8faf28f893ec8b3b04956739c46dffbd",
+    "ingested_at": "2026-06-25T08:02:48.094063",
+    "chunks": 81,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc107.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc108.pdf": {
+    "hash": "dff08269d24e7ee6ba79c68df4728725",
+    "ingested_at": "2026-06-25T08:03:46.175304",
+    "chunks": 33,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc108.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc109.pdf": {
+    "hash": "bea41c814d87d99a1b44eb90b20900a6",
+    "ingested_at": "2026-06-25T08:05:07.011757",
+    "chunks": 119,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc109.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc110.pdf": {
+    "hash": "62af1126ee9553e72f5521c73f33001f",
+    "ingested_at": "2026-06-25T08:05:42.550710",
+    "chunks": 53,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc110.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc111.pdf": {
+    "hash": "6a4d570081a2eec1ef6610a3fa424f61",
+    "ingested_at": "2026-06-25T08:06:50.379332",
+    "chunks": 97,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc111.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc112.pdf": {
+    "hash": "9556b5d959d0e2c0b238653feab129ef",
+    "ingested_at": "2026-06-25T08:07:34.643336",
+    "chunks": 63,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc112.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc113.pdf": {
+    "hash": "c0b18b40f4641dc44ec3d15fae0f3989",
+    "ingested_at": "2026-06-25T08:08:04.853838",
+    "chunks": 42,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc113.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc1an.pdf": {
+    "hash": "8560933636cd8456fd9efab4c0f1bbe8",
+    "ingested_at": "2026-06-25T08:08:10.017294",
+    "chunks": 5,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc1an.pdf",
+    "images_extracted": true
+  },
+  "class_10/science/jesc1ps.pdf": {
+    "hash": "9c88b0097d52e6be674fb1d29eb4d807",
+    "ingested_at": "2026-06-25T08:08:34.176095",
+    "chunks": 38,
+    "class": "class_10",
+    "subject": "science",
+    "filename": "jesc1ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess101.pdf": {
+    "hash": "9359dc3ea047a16b74edf90b3b2b04b3",
+    "ingested_at": "2026-06-25T08:09:13.457445",
+    "chunks": 56,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess101.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess102.pdf": {
+    "hash": "7e236ca22e3598b45b4369ed6ddc63e7",
+    "ingested_at": "2026-06-25T08:09:31.504532",
+    "chunks": 27,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess102.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess103.pdf": {
+    "hash": "691c6e11ac9bd2190ea70c787ddd7029",
+    "ingested_at": "2026-06-25T08:10:04.120855",
+    "chunks": 48,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess103.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess104.pdf": {
+    "hash": "c454041919742b025bb21150204ba97c",
+    "ingested_at": "2026-06-25T08:10:40.516444",
+    "chunks": 53,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess104.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess105.pdf": {
+    "hash": "ce0d55f495d958e5c433a9b719b62273",
+    "ingested_at": "2026-06-25T08:11:26.220071",
+    "chunks": 66,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess105.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess106.pdf": {
+    "hash": "83bf4777aafb45821290f456d936cd40",
+    "ingested_at": "2026-06-25T08:12:02.245215",
+    "chunks": 52,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess106.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess107.pdf": {
+    "hash": "6c3b05a03f6b86308616762a5ea29902",
+    "ingested_at": "2026-06-25T08:12:33.122941",
+    "chunks": 56,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess107.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess1a1.pdf": {
+    "hash": "2c823497b2fbc3f380af8c911dece387",
+    "ingested_at": "2026-06-25T08:12:37.733147",
+    "chunks": 9,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess1a1.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess1ps.pdf": {
+    "hash": "857690bc2ea8a1a088523f2d9d303e04",
+    "ingested_at": "2026-06-25T08:12:57.240980",
+    "chunks": 35,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess1ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess201.pdf": {
+    "hash": "e853b3c024a0909d4f829c2bd657f397",
+    "ingested_at": "2026-06-25T08:13:42.820317",
+    "chunks": 79,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess201.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess202.pdf": {
+    "hash": "80de0338c0ccaa30635f99beae4a91a2",
+    "ingested_at": "2026-06-25T08:14:43.939957",
+    "chunks": 109,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess202.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess203.pdf": {
+    "hash": "f9b34c5d5effcf9464beb8aca4d3e5fb",
+    "ingested_at": "2026-06-25T08:15:28.335149",
+    "chunks": 79,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess203.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess204.pdf": {
+    "hash": "665dc3edce49d68bbd85565f49e95027",
+    "ingested_at": "2026-06-25T08:16:22.421733",
+    "chunks": 97,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess204.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess205.pdf": {
+    "hash": "86f7b4d1be61799a0fe6bd07d652ee52",
+    "ingested_at": "2026-06-25T08:17:15.743353",
+    "chunks": 87,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess205.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess2ps.pdf": {
+    "hash": "4eb3a12adf463c08b171eb4e00762422",
+    "ingested_at": "2026-06-25T08:17:46.290118",
+    "chunks": 57,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess2ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess301.pdf": {
+    "hash": "1d6af8878fc7cd7fe7cbf9e0b81c54e3",
+    "ingested_at": "2026-06-25T08:18:53.673726",
+    "chunks": 123,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess301.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess302.pdf": {
+    "hash": "64ecbff5322f7ba6eda38d85cfc22a99",
+    "ingested_at": "2026-06-25T08:19:53.723103",
+    "chunks": 110,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess302.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess303.pdf": {
+    "hash": "c776f182e8ec248b80bc391c76e6165f",
+    "ingested_at": "2026-06-25T08:21:03.751974",
+    "chunks": 124,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess303.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess304.pdf": {
+    "hash": "c19a36ba2b7fe48a207404190eef8327",
+    "ingested_at": "2026-06-25T08:22:11.554971",
+    "chunks": 112,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess304.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess305.pdf": {
+    "hash": "b6b48af62fe2c8908253464770b8e37f",
+    "ingested_at": "2026-06-25T08:23:26.235853",
+    "chunks": 121,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess305.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess3ps.pdf": {
+    "hash": "50ddd5e75cbab9998f0c32b2ede0d55b",
+    "ingested_at": "2026-06-25T08:23:47.434338",
+    "chunks": 36,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess3ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess401.pdf": {
+    "hash": "556e0302948a601097b1ec86b6576d70",
+    "ingested_at": "2026-06-25T08:24:21.100305",
+    "chunks": 57,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess401.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess402.pdf": {
+    "hash": "3a99877a21b64aa3e5af16bd5cff8d39",
+    "ingested_at": "2026-06-25T08:25:02.303175",
+    "chunks": 72,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess402.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess403.pdf": {
+    "hash": "b62b599a97e0559da18bf919d2c57a26",
+    "ingested_at": "2026-06-25T08:25:42.760412",
+    "chunks": 74,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess403.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess404.pdf": {
+    "hash": "ca344cac55e6a1b92c8046f9fe0607cc",
+    "ingested_at": "2026-06-25T08:26:24.691196",
+    "chunks": 77,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess404.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess405.pdf": {
+    "hash": "d4086bc7b6605f4edabddf6cc209f70b",
+    "ingested_at": "2026-06-25T08:26:55.566697",
+    "chunks": 53,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess405.pdf",
+    "images_extracted": true
+  },
+  "class_10/socialscience/jess4ps.pdf": {
+    "hash": "b9c1883b2a284b046163d90496b9e7bd",
+    "ingested_at": "2026-06-25T08:27:20.618119",
+    "chunks": 45,
+    "class": "class_10",
+    "subject": "socialscience",
+    "filename": "jess4ps.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp101.pdf": {
+    "hash": "343cbc085afbe23cb2f39a892c0c7f98",
+    "ingested_at": "2026-06-25T08:28:06.503353",
+    "chunks": 65,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp101.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp102.pdf": {
+    "hash": "8a7c26773028fffa6c6b5be69c035a9b",
+    "ingested_at": "2026-06-25T08:29:31.833085",
+    "chunks": 115,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp102.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp103.pdf": {
+    "hash": "b0eb2e875b5821657b1308735d03f96f",
+    "ingested_at": "2026-06-25T08:30:51.335343",
+    "chunks": 125,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp103.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp104.pdf": {
+    "hash": "944cacd89a17dfd18146ca62d8b839af",
+    "ingested_at": "2026-06-25T08:32:09.451957",
+    "chunks": 99,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp104.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp105.pdf": {
+    "hash": "0a8d6f934d2c37b6290e99435fb083b6",
+    "ingested_at": "2026-06-25T08:33:33.075055",
+    "chunks": 115,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp105.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp106.pdf": {
+    "hash": "c424010a2595e11258ef74b97f8b32b4",
+    "ingested_at": "2026-06-25T08:34:44.730341",
+    "chunks": 95,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp106.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp107.pdf": {
+    "hash": "2fe582987c57abb9769a84ab54c4e591",
+    "ingested_at": "2026-06-25T08:35:47.362724",
+    "chunks": 94,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp107.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp1ps.pdf": {
+    "hash": "ce4c677c680b5e02da49057a495e04db",
+    "ingested_at": "2026-06-25T08:36:22.219308",
+    "chunks": 59,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp1ps.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp201.pdf": {
+    "hash": "90e1be6e8bb2c7e76b528252bb5937a2",
+    "ingested_at": "2026-06-25T08:37:35.241972",
+    "chunks": 109,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp201.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp202.pdf": {
+    "hash": "9a34bde08d9bd2215928a8d3f4052627",
+    "ingested_at": "2026-06-25T08:38:14.444802",
+    "chunks": 55,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp202.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp203.pdf": {
+    "hash": "e31e45e2ce2afe65af86694df3e50406",
+    "ingested_at": "2026-06-25T08:38:49.441885",
+    "chunks": 50,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp203.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp204.pdf": {
+    "hash": "1a7af89372acc39477d0a975bcd5516b",
+    "ingested_at": "2026-06-25T08:39:44.244010",
+    "chunks": 73,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp204.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp205.pdf": {
+    "hash": "ece280f3d15ad7ac280d55a82434b288",
+    "ingested_at": "2026-06-25T08:40:45.870770",
+    "chunks": 87,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp205.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp206.pdf": {
+    "hash": "62d437e806bffc2099a22ed97972c349",
+    "ingested_at": "2026-06-25T08:41:11.970601",
+    "chunks": 33,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp206.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp207.pdf": {
+    "hash": "d1ed306f04137f5eb28ee7e87c6b976b",
+    "ingested_at": "2026-06-25T08:41:51.839796",
+    "chunks": 60,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp207.pdf",
+    "images_extracted": true
+  },
+  "class_8/maths/hegp2ps.pdf": {
+    "hash": "59aac183e7a7569707e57d5355e598d8",
+    "ingested_at": "2026-06-25T08:42:24.675105",
+    "chunks": 60,
+    "class": "class_8",
+    "subject": "maths",
+    "filename": "hegp2ps.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu101.pdf": {
+    "hash": "5ff9bf1eafccfa8d55e9ae11879db9e8",
+    "ingested_at": "2026-06-25T08:42:41.046725",
+    "chunks": 27,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu101.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu102.pdf": {
+    "hash": "d848c632387cbd2116c3f1c3a64b1ae0",
+    "ingested_at": "2026-06-25T08:43:35.973874",
+    "chunks": 86,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu102.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu103.pdf": {
+    "hash": "3ae9be64cb504ea312a759bbac320de5",
+    "ingested_at": "2026-06-25T08:44:19.784633",
+    "chunks": 73,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu103.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu104.pdf": {
+    "hash": "bcfc8220f544edf22f51ba9bb8e2eb2c",
+    "ingested_at": "2026-06-25T08:44:59.954545",
+    "chunks": 63,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu104.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu105.pdf": {
+    "hash": "ee9cf96be3a94d345eaed2094a6c01a9",
+    "ingested_at": "2026-06-25T08:45:46.426331",
+    "chunks": 70,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu105.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu106.pdf": {
+    "hash": "3d0fcee6b0c387813632531cfc93fe26",
+    "ingested_at": "2026-06-25T08:46:38.763840",
+    "chunks": 74,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu106.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu107.pdf": {
+    "hash": "bf639cf61c9c1b6cd495b42d408c01bc",
+    "ingested_at": "2026-06-25T08:47:24.788388",
+    "chunks": 64,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu107.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu108.pdf": {
+    "hash": "dd01d9aeef3e2e95e49d4208ec923218",
+    "ingested_at": "2026-06-25T08:48:17.433552",
+    "chunks": 71,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu108.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu109.pdf": {
+    "hash": "2c0885d7943b755875208a0aca759b7c",
+    "ingested_at": "2026-06-25T08:49:08.574334",
+    "chunks": 71,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu109.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu110.pdf": {
+    "hash": "946a0553d329bf96e1a1d08cd70258bb",
+    "ingested_at": "2026-06-25T08:49:51.166799",
+    "chunks": 69,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu110.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu111.pdf": {
+    "hash": "cd27d3803b34759cae49df6dee60cffb",
+    "ingested_at": "2026-06-25T08:50:47.624916",
+    "chunks": 84,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu111.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu112.pdf": {
+    "hash": "728532e0c8ae4882f080c18e1274d4ee",
+    "ingested_at": "2026-06-25T08:51:43.515991",
+    "chunks": 81,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu112.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu113.pdf": {
+    "hash": "4b7374fa99fa1008b4c3771c8141634b",
+    "ingested_at": "2026-06-25T08:52:48.130902",
+    "chunks": 88,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu113.pdf",
+    "images_extracted": true
+  },
+  "class_8/science/hecu1ps.pdf": {
+    "hash": "3f8801463be5da8d4043c7cf839562cf",
+    "ingested_at": "2026-06-25T08:53:34.234368",
+    "chunks": 72,
+    "class": "class_8",
+    "subject": "science",
+    "filename": "hecu1ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/kvhindistudy.pdf": {
+    "hash": "d6b35f4257dda82e1bccd4342e70f8b9",
+    "ingested_at": "2026-06-25T22:52:31.959823",
+    "chunks": 725,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "kvhindistudy.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp101.pdf": {
+    "hash": "343cbc085afbe23cb2f39a892c0c7f98",
+    "ingested_at": "2026-06-26T18:04:40.760309",
+    "chunks": 65,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp101.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp102.pdf": {
+    "hash": "8a7c26773028fffa6c6b5be69c035a9b",
+    "ingested_at": "2026-06-26T18:06:25.561160",
+    "chunks": 115,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp102.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp103.pdf": {
+    "hash": "b0eb2e875b5821657b1308735d03f96f",
+    "ingested_at": "2026-06-26T18:08:05.512827",
+    "chunks": 125,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp103.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp104.pdf": {
+    "hash": "8a55f95cde54cfb2d9728a03e61991cf",
+    "ingested_at": "2026-06-26T18:09:27.445845",
+    "chunks": 99,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp104.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp105.pdf": {
+    "hash": "0a8d6f934d2c37b6290e99435fb083b6",
+    "ingested_at": "2026-06-26T18:11:09.494320",
+    "chunks": 115,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp105.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp106.pdf": {
+    "hash": "c424010a2595e11258ef74b97f8b32b4",
+    "ingested_at": "2026-06-26T18:12:38.229538",
+    "chunks": 95,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp106.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp107.pdf": {
+    "hash": "2fe582987c57abb9769a84ab54c4e591",
+    "ingested_at": "2026-06-26T18:13:54.424976",
+    "chunks": 94,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp107.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp1ps.pdf": {
+    "hash": "ce4c677c680b5e02da49057a495e04db",
+    "ingested_at": "2026-06-26T18:14:36.528393",
+    "chunks": 59,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp1ps.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp201.pdf": {
+    "hash": "90e1be6e8bb2c7e76b528252bb5937a2",
+    "ingested_at": "2026-06-26T18:16:12.506361",
+    "chunks": 109,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp201.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp202.pdf": {
+    "hash": "9a34bde08d9bd2215928a8d3f4052627",
+    "ingested_at": "2026-06-26T18:17:02.776620",
+    "chunks": 55,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp202.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp203.pdf": {
+    "hash": "e31e45e2ce2afe65af86694df3e50406",
+    "ingested_at": "2026-06-26T18:17:43.166890",
+    "chunks": 50,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp203.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp204.pdf": {
+    "hash": "d7e2d2276118fb13c3694446e6c304f2",
+    "ingested_at": "2026-06-26T18:18:45.385560",
+    "chunks": 73,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp204.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp205.pdf": {
+    "hash": "ece280f3d15ad7ac280d55a82434b288",
+    "ingested_at": "2026-06-26T18:22:12.857473",
+    "chunks": 87,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp205.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp206.pdf": {
+    "hash": "62d437e806bffc2099a22ed97972c349",
+    "ingested_at": "2026-06-26T18:23:01.132173",
+    "chunks": 33,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp206.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp207.pdf": {
+    "hash": "d1ed306f04137f5eb28ee7e87c6b976b",
+    "ingested_at": "2026-06-26T18:24:11.053365",
+    "chunks": 60,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp207.pdf",
+    "images_extracted": true
+  },
+  "class_8/mathematics/hegp2ps.pdf": {
+    "hash": "59aac183e7a7569707e57d5355e598d8",
+    "ingested_at": "2026-06-26T18:25:15.238402",
+    "chunks": 60,
+    "class": "class_8",
+    "subject": "mathematics",
+    "filename": "hegp2ps.pdf",
+    "images_extracted": true
+  },
+  "class_8/socialscience/hees101.pdf": {
+    "hash": "3a7df033e475859a8b8021183168702f",
+    "ingested_at": "2026-06-27T09:10:07.235581",
+    "chunks": 69,
+    "class": "class_8",
+    "subject": "socialscience",
+    "filename": "hees101.pdf",
+    "images_extracted": true
+  },
+  "class_8/socialscience/hees102.pdf": {
+    "hash": "525c2c64d08265bcc0632b2b5d71f6a4",
+    "ingested_at": "2026-06-27T09:11:35.198291",
+    "chunks": 119,
+    "class": "class_8",
+    "subject": "socialscience",
+    "filename": "hees102.pdf",
+    "images_extracted": true
+  },
+  "class_8/socialscience/hees103.pdf": {
+    "hash": "7add1724987d989b28ed92cf95ef2db7",
+    "ingested_at": "2026-06-27T09:12:22.998241",
+    "chunks": 72,
+    "class": "class_8",
+    "subject": "socialscience",
+    "filename": "hees103.pdf",
+    "images_extracted": true
+  },
+  "class_8/socialscience/hees104.pdf": {
+    "hash": "324e172c3ea3044407494a8c633cfae4",
+    "ingested_at": "2026-06-27T09:13:36.632392",
+    "chunks": 116,
+    "class": "class_8",
+    "subject": "socialscience",
+    "filename": "hees104.pdf",
+    "images_extracted": true
+  },
+  "class_8/socialscience/hees105.pdf": {
+    "hash": "63afd5a817c01ea9be2f46c94b5e693d",
+    "ingested_at": "2026-06-27T09:14:18.649045",
+    "chunks": 64,
+    "class": "class_8",
+    "subject": "socialscience",
+    "filename": "hees105.pdf",
+    "images_extracted": true
+  },
+  "class_8/socialscience/hees106.pdf": {
+    "hash": "bed9daaeddcab656e8c0f3fecc1993bc",
+    "ingested_at": "2026-06-27T09:15:07.216773",
+    "chunks": 82,
+    "class": "class_8",
+    "subject": "socialscience",
+    "filename": "hees106.pdf",
+    "images_extracted": true
+  },
+  "class_8/socialscience/hees107.pdf": {
+    "hash": "6333c6c6bda321a8d02e43b67f94c00c",
+    "ingested_at": "2026-06-27T09:15:52.137532",
+    "chunks": 66,
+    "class": "class_8",
+    "subject": "socialscience",
+    "filename": "hees107.pdf",
+    "images_extracted": true
+  },
+  "class_8/socialscience/hees1gl.pdf": {
+    "hash": "88a4c28a11a3b9f562c1726fc3d76e0a",
+    "ingested_at": "2026-06-27T09:16:29.677619",
+    "chunks": 39,
+    "class": "class_8",
+    "subject": "socialscience",
+    "filename": "hees1gl.pdf",
+    "images_extracted": true
+  },
+  "class_8/socialscience/hees1ps.pdf": {
+    "hash": "ddf14ee6e0b5e6d54231ceffb2334a64",
+    "ingested_at": "2026-06-27T09:17:18.717751",
+    "chunks": 63,
+    "class": "class_8",
+    "subject": "socialscience",
+    "filename": "hees1ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/Vyakaran Parichay Class 10 Course B - Full Marks Pvt Ltd - \u092a\u0943\u0937\u094d\u0920 1 - 114 _ \u092a\u0940\u0921\u0940\u090f\u092b \u0911\u0928\u0932\u093e\u0907\u0928 \u092b\u094d\u0932\u093f\u092a \u0915\u0930\u0947\u0902 _ PubHTML5.pdf": {
+    "hash": "f27b236e9fa91fb73d850267a8d163b4",
+    "ingested_at": "2026-06-27T12:22:44.558277",
+    "chunks": 114,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "Vyakaran Parichay Class 10 Course B - Full Marks Pvt Ltd - \u092a\u0943\u0937\u094d\u0920 1 - 114 _ \u092a\u0940\u0921\u0940\u090f\u092b \u0911\u0928\u0932\u093e\u0907\u0928 \u092b\u094d\u0932\u093f\u092a \u0915\u0930\u0947\u0902 _ PubHTML5.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhkr101.pdf": {
+    "hash": "a5831d4bb3d8412ca0917a0611ed33d2",
+    "ingested_at": "2026-06-27T12:23:23.893352",
+    "chunks": 28,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhkr101.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhkr102.pdf": {
+    "hash": "c703f153e64e4edba6d548a25389fe21",
+    "ingested_at": "2026-06-27T12:24:34.496096",
+    "chunks": 55,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhkr102.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhkr103.pdf": {
+    "hash": "53fc6cb4101e9008dc37b1959190c116",
+    "ingested_at": "2026-06-27T12:24:56.655464",
+    "chunks": 16,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhkr103.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhkr1lp.pdf": {
+    "hash": "8b5047c8eded39bafe19401bffdd9aba",
+    "ingested_at": "2026-06-27T12:25:05.342699",
+    "chunks": 6,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhkr1lp.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhkr1ps.pdf": {
+    "hash": "0d77eb15653d5b59c5f23d3b2bbe58f4",
+    "ingested_at": "2026-06-27T12:25:47.909359",
+    "chunks": 36,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhkr1ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks101.pdf": {
+    "hash": "95393434c6248ef237fb2f67b90449f1",
+    "ingested_at": "2026-06-27T12:26:10.297419",
+    "chunks": 17,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks101.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks102.pdf": {
+    "hash": "74cbad82e6ff9ff0859bf9dcfe981cae",
+    "ingested_at": "2026-06-27T12:26:34.237335",
+    "chunks": 18,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks102.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks103.pdf": {
+    "hash": "be7076e0a87d9bd7fd8e4bb79aa85a03",
+    "ingested_at": "2026-06-27T12:26:53.256258",
+    "chunks": 12,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks103.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks104.pdf": {
+    "hash": "37add56619cf994b0a2f435bf50cd140",
+    "ingested_at": "2026-06-27T12:27:08.519641",
+    "chunks": 12,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks104.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks105.pdf": {
+    "hash": "d04165017d75d06234a1f21d55914967",
+    "ingested_at": "2026-06-27T12:27:27.076453",
+    "chunks": 15,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks105.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks106.pdf": {
+    "hash": "6a3845b729ad9123f20e5deccffa4e73",
+    "ingested_at": "2026-06-27T12:27:47.578141",
+    "chunks": 16,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks106.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks107.pdf": {
+    "hash": "6625062a25b816ca84ed8918ca4f795b",
+    "ingested_at": "2026-06-27T12:28:34.454007",
+    "chunks": 34,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks107.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks108.pdf": {
+    "hash": "afcef38a3aba775b4f1cdb7a5b657729",
+    "ingested_at": "2026-06-27T12:29:13.004163",
+    "chunks": 27,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks108.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks109.pdf": {
+    "hash": "54727964b8ae7facb9445cd7a2bd1150",
+    "ingested_at": "2026-06-27T12:29:36.343445",
+    "chunks": 19,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks109.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks110.pdf": {
+    "hash": "7aaa241a0233d24cf0d52a8d91126a78",
+    "ingested_at": "2026-06-27T12:30:32.000385",
+    "chunks": 43,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks110.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks111.pdf": {
+    "hash": "a6ef15b4c5aaff7279c42c0289624969",
+    "ingested_at": "2026-06-27T12:31:25.603731",
+    "chunks": 39,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks111.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks112.pdf": {
+    "hash": "889d9b19572fc7b9a140ece967817eae",
+    "ingested_at": "2026-06-27T12:31:52.033440",
+    "chunks": 21,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks112.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhks1ps.pdf": {
+    "hash": "cec7d48bdf01a2e0bc3287426c89b0a8",
+    "ingested_at": "2026-06-27T12:32:41.388550",
+    "chunks": 40,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhks1ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp101.pdf": {
+    "hash": "85844d695eff36abb5fca42bdbf9c834",
+    "ingested_at": "2026-06-27T12:32:55.858228",
+    "chunks": 12,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp101.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp102.pdf": {
+    "hash": "5a07fe127fb1768fa350ed95bed18ec0",
+    "ingested_at": "2026-06-27T12:33:10.943779",
+    "chunks": 11,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp102.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp103.pdf": {
+    "hash": "351aa2f8ad6d6fab89e02d3f97b58336",
+    "ingested_at": "2026-06-27T12:33:30.265655",
+    "chunks": 15,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp103.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp104.pdf": {
+    "hash": "5dc619154fd8e7c11c6504c32cdbb52e",
+    "ingested_at": "2026-06-27T12:33:45.285548",
+    "chunks": 11,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp104.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp105.pdf": {
+    "hash": "44a2abc109a0682ce0bbb838324d7001",
+    "ingested_at": "2026-06-27T12:33:58.209912",
+    "chunks": 11,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp105.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp106.pdf": {
+    "hash": "976dbd479f1f2a57a196457d5133be6f",
+    "ingested_at": "2026-06-27T12:34:13.408221",
+    "chunks": 13,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp106.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp107.pdf": {
+    "hash": "a91be72ba3c9b2f83f0a6487735f0880",
+    "ingested_at": "2026-06-27T12:34:28.133914",
+    "chunks": 11,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp107.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp108.pdf": {
+    "hash": "e8076846bd26cabd08386746e1d7d11a",
+    "ingested_at": "2026-06-27T12:35:36.405392",
+    "chunks": 56,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp108.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp109.pdf": {
+    "hash": "5f6f929517baec8bb0f1aed817a04596",
+    "ingested_at": "2026-06-27T12:36:18.600052",
+    "chunks": 33,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp109.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp110.pdf": {
+    "hash": "c4db37223bf614f7d42f151887f563b8",
+    "ingested_at": "2026-06-27T12:37:13.285818",
+    "chunks": 44,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp110.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp111.pdf": {
+    "hash": "e751ecd0cbf46f4fc49934fa662fbbdb",
+    "ingested_at": "2026-06-27T12:37:57.283660",
+    "chunks": 34,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp111.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp112.pdf": {
+    "hash": "035331461db234833075873140e6e110",
+    "ingested_at": "2026-06-27T12:38:31.635815",
+    "chunks": 26,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp112.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp113.pdf": {
+    "hash": "42364ebb45c2088ddfc8666348f1168b",
+    "ingested_at": "2026-06-27T12:39:08.478580",
+    "chunks": 27,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp113.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp114.pdf": {
+    "hash": "c02180493b819d2c51a7ee72ee033943",
+    "ingested_at": "2026-06-27T12:39:41.030287",
+    "chunks": 26,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp114.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsp1ps.pdf": {
+    "hash": "3133e8df679e729b00d046f1472180a9",
+    "ingested_at": "2026-06-27T12:40:37.271507",
+    "chunks": 45,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsp1ps.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsy101.pdf": {
+    "hash": "c33a43b24b0142b9f3f0975e379282f9",
+    "ingested_at": "2026-06-27T12:42:26.295887",
+    "chunks": 83,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsy101.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsy102.pdf": {
+    "hash": "16cf53e1d9bb3d20775e97f8cbcf2a05",
+    "ingested_at": "2026-06-27T12:43:23.898600",
+    "chunks": 39,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsy102.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsy103.pdf": {
+    "hash": "2fc2b9f0e8b2ecef26a895b477ad4f45",
+    "ingested_at": "2026-06-27T12:44:29.613344",
+    "chunks": 47,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsy103.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsy1lp.pdf": {
+    "hash": "13bad83be84bea96820488f55615f6a3",
+    "ingested_at": "2026-06-27T12:44:39.550437",
+    "chunks": 9,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsy1lp.pdf",
+    "images_extracted": true
+  },
+  "class_10/hindi/jhsy1ps.pdf": {
+    "hash": "3c37b9f7d354c3b7cced2f70fc98ea71",
+    "ingested_at": "2026-06-27T12:45:18.702016",
+    "chunks": 30,
+    "class": "class_10",
+    "subject": "hindi",
+    "filename": "jhsy1ps.pdf",
+    "images_extracted": true
+  }
+}

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBSE RAG — Test Client</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    color: #7dd3fc;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card {
+    background: #1e2130;
+    border: 1px solid #2d3148;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  label {
+    display: block;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  select, textarea, input {
+    width: 100%;
+    background: #0f1117;
+    border: 1px solid #2d3148;
+    border-radius: 8px;
+    color: #e2e8f0;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    margin-bottom: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  select:focus, textarea:focus {
+    border-color: #7dd3fc;
+  }
+
+  textarea {
+    min-height: 80px;
+    resize: vertical;
+    font-family: inherit;
+  }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  button {
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 24px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  button:hover   { background: #1d4ed8; }
+  button:disabled{ background: #374151; cursor: not-allowed; }
+
+  #status-bar {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-top: 8px;
+    min-height: 20px;
+  }
+
+  /* Answer area */
+  #answer-box {
+    background: #0f1117;
+    border: 1px solid #2d3148;
+    border-radius: 8px;
+    padding: 16px;
+    min-height: 120px;
+    white-space: pre-wrap;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    font-family: inherit;
+  }
+
+  /* Sources */
+  #sources-box {
+    display: none;
+  }
+
+  .source-item {
+    background: #0f1117;
+    border: 1px solid #2d3148;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-size: 0.82rem;
+    color: #94a3b8;
+  }
+
+  .source-item span { color: #7dd3fc; font-weight: 600; }
+
+  /* Images */
+  #images-box { display: none; }
+
+  .image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+  }
+
+  .image-card {
+    background: #0f1117;
+    border: 1px solid #2d3148;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .image-card:hover { border-color: #7dd3fc; }
+
+  .image-card img {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .image-card .img-meta {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    color: #64748b;
+  }
+
+  /* Lightbox */
+  #lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  #lightbox.open { display: flex; }
+
+  #lightbox img {
+    max-width: 90vw;
+    max-height: 85vh;
+    border-radius: 8px;
+    object-fit: contain;
+  }
+
+  #lightbox-close {
+    position: absolute;
+    top: 16px; right: 20px;
+    font-size: 1.8rem;
+    color: white;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  /* Markdown-like rendering */
+  .md-bold   { font-weight: 700; color: #f1f5f9; }
+  .md-code   { font-family: monospace; background: #1e2130; padding: 2px 6px;
+               border-radius: 4px; font-size: 0.9em; color: #86efac; }
+  .md-h3     { font-weight: 700; font-size: 1.05rem; color: #7dd3fc;
+               margin: 12px 0 4px; }
+
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+         background: #7dd3fc; animation: blink 1s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+</style>
+</head>
+<body>
+
+<h1>🎓 CBSE RAG — Test Client</h1>
+
+<!-- Config -->
+<div class="card">
+  <label>API Base URL</label>
+  <input type="text" id="api-url" value="http://localhost:8000" />
+
+  <div class="row">
+    <div>
+      <label>Class</label>
+      <select id="class-select">
+        <option value="">Loading...</option>
+      </select>
+    </div>
+    <div>
+      <label>Subject</label>
+      <select id="subject-select">
+        <option value="">Select class first</option>
+      </select>
+    </div>
+  </div>
+
+  <label>Question</label>
+  <textarea id="question" placeholder="e.g. How do you find the roots of a quadratic equation?"></textarea>
+
+  <button id="ask-btn" onclick="askQuestion()">Ask →</button>
+  <div id="status-bar"></div>
+</div>
+
+<!-- Sources -->
+<div class="card" id="sources-box">
+  <label>📌 Sources Retrieved</label>
+  <div id="sources-list"></div>
+</div>
+
+<!-- Answer -->
+<div class="card">
+  <label>📖 Answer</label>
+  <div id="answer-box"><span style="color:#374151">Answer will appear here...</span></div>
+</div>
+
+<!-- Images -->
+<div class="card" id="images-box">
+  <label>🖼 Relevant Diagrams</label>
+  <div class="image-grid" id="image-grid"></div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <span id="lightbox-close" onclick="closeLightbox()">✕</span>
+  <img id="lightbox-img" src="" alt="diagram" />
+</div>
+
+<script>
+const API = () => document.getElementById("api-url").value.replace(/\/$/, "");
+
+// ── Load classes on startup ───────────────────────────────────────────────────
+async function loadClasses() {
+  try {
+    const res  = await fetch(`${API()}/api/classes`);
+    const data = await res.json();
+    const sel  = document.getElementById("class-select");
+    sel.innerHTML = '<option value="">— Select class —</option>';
+    data.classes.forEach(c => {
+      sel.innerHTML += `<option value="${c.id}">${c.label}</option>`;
+    });
+  } catch(e) {
+    document.getElementById("class-select").innerHTML =
+      '<option value="">⚠ API not reachable</option>';
+  }
+}
+
+// ── Load subjects when class changes ─────────────────────────────────────────
+document.getElementById("class-select").addEventListener("change", async function() {
+  const cls = this.value;
+  const sel = document.getElementById("subject-select");
+  if (!cls) { sel.innerHTML = '<option value="">Select class first</option>'; return; }
+
+  sel.innerHTML = '<option value="">Loading...</option>';
+  try {
+    const res  = await fetch(`${API()}/api/subjects/${cls}`);
+    const data = await res.json();
+    sel.innerHTML = '<option value="">— Select subject —</option>';
+    data.subjects.forEach(s => {
+      const badge = s.ingested > 0 ? ` (${s.ingested} files)` : " ⚠ not ingested";
+      sel.innerHTML += `<option value="${s.id}">${s.label}${badge}</option>`;
+    });
+  } catch(e) {
+    sel.innerHTML = '<option value="">Error loading subjects</option>';
+  }
+});
+
+// ── Ask question via SSE ──────────────────────────────────────────────────────
+function askQuestion() {
+  const question = document.getElementById("question").value.trim();
+  const cls      = document.getElementById("class-select").value;
+  const subject  = document.getElementById("subject-select").value;
+
+  if (!question) { alert("Please enter a question."); return; }
+  if (!cls)      { alert("Please select a class."); return; }
+  if (!subject)  { alert("Please select a subject."); return; }
+
+  // Reset UI
+  document.getElementById("answer-box").innerHTML   = '<span class="dot"></span>';
+  document.getElementById("sources-box").style.display = "none";
+  document.getElementById("images-box").style.display  = "none";
+  document.getElementById("sources-list").innerHTML  = "";
+  document.getElementById("image-grid").innerHTML    = "";
+  document.getElementById("ask-btn").disabled        = true;
+  setStatus("Connecting...");
+
+  let fullAnswer = "";
+
+  // POST then read SSE stream
+  fetch(`${API()}/api/ask`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ question, class_name: cls, subject })
+  })
+  .then(response => {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const reader  = response.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = "";
+
+    function read() {
+      reader.read().then(({ done, value }) => {
+        if (done) {
+          document.getElementById("ask-btn").disabled = false;
+          setStatus("Done ✓");
+          return;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop(); // keep incomplete chunk
+
+        lines.forEach(line => {
+          if (!line.startsWith("data: ")) return;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            handleEvent(evt, fullAnswer, (ans) => { fullAnswer = ans; });
+          } catch(e) {}
+        });
+
+        read();
+      });
+    }
+    read();
+  })
+  .catch(e => {
+    setStatus("Error: " + e.message);
+    document.getElementById("ask-btn").disabled = false;
+    document.getElementById("answer-box").innerHTML =
+      `<span style="color:#f87171">Error: ${e.message}</span>`;
+  });
+}
+
+function handleEvent(evt, fullAnswer, setAnswer) {
+  switch(evt.type) {
+
+    case "status":
+      setStatus(evt.message);
+      break;
+
+    case "sources":
+      const box  = document.getElementById("sources-box");
+      const list = document.getElementById("sources-list");
+      box.style.display = "block";
+      evt.data.forEach(s => {
+        list.innerHTML +=
+          `<div class="source-item">
+             <span>${s.file}</span> — Page ${s.page}<br>
+             <span style="color:#64748b">${s.preview}...</span>
+           </div>`;
+      });
+      break;
+
+    case "token":
+      fullAnswer += evt.data;
+      setAnswer(fullAnswer);
+      document.getElementById("answer-box").innerHTML = renderMarkdown(fullAnswer);
+      // Auto-scroll
+      document.getElementById("answer-box").scrollTop =
+        document.getElementById("answer-box").scrollHeight;
+      break;
+
+    case "images":
+      const imgBox  = document.getElementById("images-box");
+      const imgGrid = document.getElementById("image-grid");
+      if (evt.data && evt.data.length > 0) {
+        imgBox.style.display = "block";
+        evt.data.forEach(img => {
+          const apiBase = API();
+          imgGrid.innerHTML +=
+            `<div class="image-card" onclick="openLightbox('${apiBase}${img.url}')">
+               <img src="${apiBase}${img.url}" alt="diagram page ${img.page}"
+                    onerror="this.parentElement.style.display='none'" />
+               <div class="img-meta">${img.source} · p.${img.page}</div>
+             </div>`;
+        });
+      }
+      break;
+
+    case "error":
+      setStatus("Error: " + evt.message);
+      document.getElementById("answer-box").innerHTML =
+        `<span style="color:#f87171">⚠ ${evt.message}</span>`;
+      document.getElementById("ask-btn").disabled = false;
+      break;
+
+    case "done":
+      setStatus("Done ✓");
+      document.getElementById("ask-btn").disabled = false;
+      break;
+  }
+}
+
+// ── Simple markdown renderer ──────────────────────────────────────────────────
+function renderMarkdown(text) {
+  return text
+    // Code blocks
+    .replace(/```[\w]*\n([\s\S]*?)```/g,
+      '<pre style="background:#0a0d14;padding:12px;border-radius:6px;overflow-x:auto;margin:8px 0"><code style="color:#86efac;font-family:monospace;font-size:0.88rem">$1</code></pre>')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="md-bold">$1</strong>')
+    // H3
+    .replace(/^### (.+)$/gm, '<div class="md-h3">$1</div>')
+    // H2
+    .replace(/^## (.+)$/gm,
+      '<div style="font-weight:700;font-size:1.1rem;color:#c4b5fd;margin:14px 0 4px">$1</div>')
+    // Numbered list
+    .replace(/^\d+\.\s(.+)$/gm,
+      '<div style="margin:4px 0;padding-left:8px">• $1</div>')
+    // Newlines
+    .replace(/\n/g, '<br>');
+}
+
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+function openLightbox(url) {
+  document.getElementById("lightbox-img").src = url;
+  document.getElementById("lightbox").classList.add("open");
+}
+
+function closeLightbox() {
+  document.getElementById("lightbox").classList.remove("open");
+  document.getElementById("lightbox-img").src = "";
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeLightbox();
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setStatus(msg) {
+  document.getElementById("status-bar").textContent = msg;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadClasses();
+
+// Allow Ctrl+Enter to submit
+document.getElementById("question").addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) askQuestion();
+});
+</script>
+</body>
+</html>
