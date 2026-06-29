@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBSE Tutor</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+:root{--bg:#0d1117;--surface:#161b22;--border:#21262d;--text:#e6edf3;--muted:#7d8590;--accent:#388bfd;--accent-dim:#1f3a5f;--green:#22c55e;--yellow:#eab308;--orange:#f97316;--red:#ef4444;--purple:#bc8cff;--radius:10px;--mono:'JetBrains Mono',monospace;--sans:'Inter',system-ui,sans-serif;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+nav{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:52px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.nav-brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:1rem;color:var(--text);text-decoration:none}
+.pill{background:var(--accent-dim);color:var(--accent);font-size:.65rem;font-weight:600;padding:2px 8px;border-radius:20px;text-transform:uppercase}
+.nav-links{display:flex;gap:4px}
+.nav-links a{color:var(--muted);font-size:.85rem;text-decoration:none;padding:6px 12px;border-radius:6px;transition:background .15s,color .15s}
+.nav-links a:hover,.nav-links a.active{background:var(--border);color:var(--text)}
+.layout{display:flex;flex:1;overflow:hidden}
+.sidebar{width:264px;flex-shrink:0;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;padding:16px;gap:14px;overflow-y:auto}
+.sidebar label{display:block;font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.sidebar select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-size:.85rem;font-family:var(--sans);outline:none;cursor:pointer;transition:border-color .15s}
+.sidebar select:focus{border-color:var(--accent)}
+.mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.mode-btn{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:.74rem;font-family:var(--sans);padding:7px 5px;cursor:pointer;text-align:center;transition:all .15s;line-height:1.3}
+.mode-btn:hover{border-color:var(--accent);color:var(--text)}
+.mode-btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);font-weight:600}
+.sidebar-sep{border-top:1px solid var(--border);padding-top:14px}
+.sidebar-link{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.83rem;text-decoration:none;padding:7px 8px;border-radius:8px;transition:background .15s,color .15s}
+.sidebar-link:hover{background:var(--border);color:var(--text)}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.messages{flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:20px}
+.empty-state{margin:auto;text-align:center;max-width:420px}
+.empty-state .icon{font-size:2.5rem;margin-bottom:12px}
+.empty-state h2{font-size:1.15rem;font-weight:600;margin-bottom:6px}
+.empty-state p{font-size:.87rem;color:var(--muted);line-height:1.6}
+.suggestions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px}
+.suggestion{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:.79rem;color:var(--muted);cursor:pointer;text-align:left;transition:all .15s;font-family:var(--sans)}
+.suggestion:hover{border-color:var(--accent);color:var(--text)}
+.msg{display:flex;flex-direction:column;gap:5px;max-width:800px}
+.msg.user{align-self:flex-end;align-items:flex-end}
+.msg.assistant{align-self:flex-start;align-items:flex-start;width:100%}
+.msg-meta{font-size:.71rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.bubble{padding:12px 16px;border-radius:var(--radius);font-size:.9rem;line-height:1.7;max-width:100%}
+.msg.user .bubble{background:var(--accent-dim);border:1px solid var(--accent)}
+.msg.assistant .bubble{background:var(--surface);border:1px solid var(--border)}
+.bubble strong{color:#f0f6fc;font-weight:600}
+.bubble code{font-family:var(--mono);background:#0d1117;color:#79c0ff;padding:1px 5px;border-radius:4px;font-size:.84em}
+.bubble pre{background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto;margin:8px 0}
+.bubble pre code{background:none;padding:0;color:#7ee787;font-size:.84rem}
+.bubble h3{color:var(--accent);font-size:.93rem;margin:10px 0 3px}
+.bubble h2{color:var(--purple);font-size:.98rem;margin:12px 0 3px}
+.bubble ul,.bubble ol{padding-left:18px;margin:5px 0}
+.bubble li{margin:2px 0}
+.status-line{font-size:.78rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.spinner{width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Confidence badge ── */
+.confidence-wrap{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:8px}
+.conf-label{font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.conf-bar-track{flex:1;height:6px;background:var(--border);border-radius:20px;overflow:hidden}
+.conf-bar-fill{height:100%;border-radius:20px;transition:width .5s ease}
+.conf-pct{font-size:.78rem;font-weight:600;white-space:nowrap;min-width:38px;text-align:right}
+.conf-badge{font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:20px;white-space:nowrap}
+
+/* ── Sources strip ── */
+.sources-strip{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.src-chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:3px 8px;font-size:.71rem;color:var(--muted)}
+.src-chip .src-name{color:var(--accent)}
+.src-chip .src-conf{font-weight:600;font-size:.67rem}
+
+/* ── Image strip ── */
+.img-strip{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.img-thumb{width:110px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;transition:border-color .15s,transform .15s}
+.img-thumb:hover{border-color:var(--accent);transform:scale(1.04)}
+
+/* ── Input bar ── */
+.input-bar{border-top:1px solid var(--border);background:var(--surface);padding:13px 20px;display:flex;gap:10px;align-items:flex-end}
+.input-wrap{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:flex-end;transition:border-color .15s;padding:2px 4px}
+.input-wrap:focus-within{border-color:var(--accent)}
+#question{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:var(--sans);font-size:.9rem;padding:10px;resize:none;min-height:42px;max-height:140px;line-height:1.5}
+#question::placeholder{color:var(--muted)}
+.send-btn{width:38px;height:38px;background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s;margin:3px}
+.send-btn:hover{background:#58a6ff}
+.send-btn:disabled{background:var(--border);cursor:not-allowed;opacity:.5}
+
+/* ── Lightbox ── */
+#lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;align-items:center;justify-content:center;padding:32px}
+#lightbox.open{display:flex}
+#lightbox img{max-width:92vw;max-height:88vh;border-radius:8px;object-fit:contain}
+#lb-close{position:absolute;top:16px;right:20px;font-size:1.5rem;color:#fff;cursor:pointer;background:rgba(255,255,255,.12);width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+<nav>
+  <a class="nav-brand" href="/"><span>🎓</span> CBSE Tutor <span class="pill">RAG</span></a>
+  <div class="nav-links">
+    <a href="/" class="active">Chat</a>
+    <a href="/upload">Upload PDF</a>
+    <a href="/quiz">Quiz</a>
+    <a href="/docs" target="_blank">API Docs</a>
+  </div>
+</nav>
+<div class="layout">
+  <aside class="sidebar">
+    <div>
+      <label>Class</label>
+      <select id="class-select" onchange="loadSubjects()"><option value="">Select class…</option></select>
+    </div>
+    <div>
+      <label>Subject</label>
+      <select id="subject-select"><option value="">Select class first</option></select>
+    </div>
+    <div>
+      <label>Answer Mode</label>
+      <div class="mode-grid">
+        <button class="mode-btn active" data-mode="detailed"   onclick="setMode(this)">📝 Detailed</button>
+        <button class="mode-btn"        data-mode="brief"      onclick="setMode(this)">📄 Brief</button>
+        <button class="mode-btn"        data-mode="one_line"   onclick="setMode(this)">💬 One Line</button>
+        <button class="mode-btn"        data-mode="mcq"        onclick="setMode(this)">🔘 MCQ</button>
+        <button class="mode-btn"        data-mode="true_false" onclick="setMode(this)">✅ True/False</button>
+      </div>
+    </div>
+    <div class="sidebar-sep">
+      <a class="sidebar-link" href="/upload">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload PDF
+      </a>
+      <a class="sidebar-link" href="/quiz">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Quiz from PDF
+      </a>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="messages" id="messages">
+      <div class="empty-state" id="empty">
+        <div class="icon">📚</div>
+        <h2>Ask your NCERT question</h2>
+        <p>Select your class and subject, then ask anything from your CBSE textbook. Each answer shows a confidence score based on how well the retrieved content matches your question.</p>
+        <div class="suggestions">
+          <button class="suggestion" onclick="fillQ(this)">What is the quadratic formula?</button>
+          <button class="suggestion" onclick="fillQ(this)">Explain photosynthesis step by step</button>
+          <button class="suggestion" onclick="fillQ(this)">What is Newton's first law?</button>
+          <button class="suggestion" onclick="fillQ(this)">Difference between mitosis and meiosis</button>
+        </div>
+      </div>
+    </div>
+    <div class="input-bar">
+      <div class="input-wrap">
+        <textarea id="question" rows="1" placeholder="Ask a question… (Ctrl+Enter to send)" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
+      </div>
+      <button class="send-btn" id="send-btn" onclick="ask()">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </main>
+</div>
+<div id="lightbox" onclick="closeLb()">
+  <div id="lb-close" onclick="closeLb()">✕</div>
+  <img id="lb-img" src="" alt="diagram" onclick="event.stopPropagation()" />
+</div>
+<script>
+let activeMode = "detailed";
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    const r = await fetch("/api/classes");
+    const d = await r.json();
+    const s = document.getElementById("class-select");
+    d.classes.forEach(c => { s.innerHTML += `<option value="${c.id}">${c.label}</option>`; });
+  } catch(e) {}
+})();
+
+async function loadSubjects() {
+  const cls = document.getElementById("class-select").value;
+  const sel = document.getElementById("subject-select");
+  if (!cls) { sel.innerHTML = "<option>Select class first</option>"; return; }
+  sel.innerHTML = "<option>Loading…</option>";
+  try {
+    const r = await fetch(`/api/subjects/${cls}`);
+    const d = await r.json();
+    sel.innerHTML = '<option value="">Select subject…</option>';
+    d.subjects.forEach(s => {
+      sel.innerHTML += `<option value="${s.id}">${s.label}${s.ingested > 0 ? '' : ' ⚠'}</option>`;
+    });
+  } catch(e) { sel.innerHTML = "<option>Error</option>"; }
+}
+
+function setMode(btn) {
+  document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  activeMode = btn.dataset.mode;
+}
+
+function fillQ(btn) {
+  document.getElementById("question").value = btn.textContent;
+  const e = document.getElementById("empty"); if (e) e.remove();
+  autoResize(document.getElementById("question"));
+}
+
+function autoResize(el) {
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 140) + "px";
+}
+
+function handleKey(e) {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ask(); }
+}
+
+// ── Confidence helpers ────────────────────────────────────────────────────────
+function confColor(pct) {
+  if (pct >= 85) return "#22c55e";
+  if (pct >= 60) return "#eab308";
+  if (pct >= 40) return "#f97316";
+  return "#ef4444";
+}
+function confLabel(pct) {
+  if (pct >= 85) return "High";
+  if (pct >= 60) return "Medium";
+  if (pct >= 40) return "Low";
+  return "Very Low";
+}
+function confBgColor(pct) {
+  if (pct >= 85) return "rgba(34,197,94,0.12)";
+  if (pct >= 60) return "rgba(234,179,8,0.12)";
+  if (pct >= 40) return "rgba(249,115,22,0.12)";
+  return "rgba(239,68,68,0.12)";
+}
+
+// ── Ask ───────────────────────────────────────────────────────────────────────
+async function ask() {
+  const question = document.getElementById("question").value.trim();
+  const cls      = document.getElementById("class-select").value;
+  const subject  = document.getElementById("subject-select").value;
+  if (!question) return;
+  if (!cls)    { alert("Please select a class.");   return; }
+  if (!subject){ alert("Please select a subject."); return; }
+
+  const e = document.getElementById("empty"); if (e) e.remove();
+  const qEl = document.getElementById("question");
+  qEl.value = ""; qEl.style.height = "auto";
+
+  const msgs = document.getElementById("messages");
+  const modeLabels = { detailed:"📝 Detailed", brief:"📄 Brief", one_line:"💬 One Line", mcq:"🔘 MCQ", true_false:"✅ True/False" };
+
+  // User bubble
+  msgs.innerHTML += `
+    <div class="msg user">
+      <div class="msg-meta">${modeLabels[activeMode]||activeMode}</div>
+      <div class="bubble">${esc(question)}</div>
+    </div>`;
+
+  const id  = "m" + Date.now();
+  const sid = "s" + Date.now();
+  const cid = "c" + Date.now();
+  const iid = "i" + Date.now();
+
+  msgs.innerHTML += `
+    <div class="msg assistant" id="${id}">
+      <div class="msg-meta">🎓 CBSE Tutor</div>
+      <div class="status-line" id="st-${id}"><div class="spinner"></div> Searching NCERT…</div>
+      <div id="${cid}" style="display:none"></div>
+      <div class="bubble" id="bbl-${id}" style="display:none"></div>
+      <div class="sources-strip" id="${sid}" style="display:none"></div>
+      <div class="img-strip" id="${iid}" style="display:none"></div>
+    </div>`;
+
+  msgs.scrollTop = msgs.scrollHeight;
+  document.getElementById("send-btn").disabled = true;
+  let fullText = "";
+
+  try {
+    const res = await fetch("/api/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, class_name: cls, subject, answer_mode: activeMode })
+    });
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split("\n\n"); buf = parts.pop();
+
+      for (const part of parts) {
+        console.info("event part data ", part);
+        if (!part.startsWith("data: ")) continue;
+        try {
+          const evt = JSON.parse(part.slice(6));
+          console.info("event part data ", evt);
+          if (evt.type === "status") {
+            document.getElementById(`st-${id}`).innerHTML =
+              `<div class="spinner"></div> ${evt.message}`;
+
+          } else if (evt.type === "confidence") {
+            // ── Overall confidence bar ────────────────────────────────────
+            const color = evt.color || confColor(evt.score);
+            const label = evt.label || confLabel(evt.score);
+            const confEl = document.getElementById(cid);
+            confEl.style.display = "block";
+            confEl.innerHTML = `
+              <div class="confidence-wrap">
+                <span class="conf-label">Confidence</span>
+                <div class="conf-bar-track">
+                  <div class="conf-bar-fill" style="width:${evt.score}%;background:${color}"></div>
+                </div>
+                <span class="conf-pct" style="color:${color}">${evt.score}%</span>
+                <span class="conf-badge" style="background:${confBgColor(evt.score)};color:${color}">${label}</span>
+              </div>`;
+
+          } else if (evt.type === "sources") {
+            // ── Per-source chips with confidence ─────────────────────────
+            const strip = document.getElementById(sid);
+            strip.style.display = "flex";
+            evt.data.forEach(s => {
+              const c = s.color || confColor(s.confidence || 0);
+              strip.innerHTML += `
+                <span class="src-chip">
+                  <span class="src-name">${s.file}</span>
+                  p.${s.page}
+                  <span class="src-conf" style="color:${c}">${s.confidence ? s.confidence.toFixed(1)+'%' : ''}</span>
+                </span>`;
+            });
+
+          } else if (evt.type === "token") {
+            fullText += evt.data;
+            const bbl = document.getElementById(`bbl-${id}`);
+            bbl.style.display = "block";
+            bbl.innerHTML = renderMd(fullText);
+            document.getElementById(`st-${id}`).style.display = "none";
+            msgs.scrollTop = msgs.scrollHeight;
+
+          } else if (evt.type === "images" && evt.data && evt.data.length) {
+            const strip = document.getElementById(iid);
+            strip.style.display = "flex";
+            evt.data.forEach(img => {
+              strip.innerHTML += `<img class="img-thumb" src="${img.url}" alt="diagram" onclick="openLb('${img.url}')" onerror="this.style.display='none'" />`;
+            });
+
+          } else if (evt.type === "error") {
+            document.getElementById(`st-${id}`).innerHTML =
+              `<span style="color:#ef4444">⚠ ${evt.message}</span>`;
+
+          } else if (evt.type === "done") {
+            document.getElementById(`st-${id}`).style.display = "none";
+          }
+        } catch(e) {}
+      }
+    }
+  } catch(e) {
+    document.getElementById(`st-${id}`).innerHTML =
+      `<span style="color:#ef4444">Connection error: ${e.message}</span>`;
+  }
+
+  document.getElementById("send-btn").disabled = false;
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function renderMd(t) {
+  return t
+    .replace(/```[\w]*\n?([\s\S]*?)```/g,'<pre><code>$1</code></pre>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/^### (.+)$/gm,'<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,'<h2>$1</h2>')
+    .replace(/^[-*] (.+)$/gm,'<li>$1</li>')
+    .replace(/\n{2,}/g,'<br><br>')
+    .replace(/\n/g,'<br>');
+}
+function openLb(url) { document.getElementById("lb-img").src=url; document.getElementById("lightbox").classList.add("open"); }
+function closeLb()   { document.getElementById("lightbox").classList.remove("open"); document.getElementById("lb-img").src=""; }
+document.addEventListener("keydown", e => { if (e.key==="Escape") closeLb(); });
+</script>
+</body>
+</html>

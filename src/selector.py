@@ -15,7 +15,7 @@ CLASSES = {
 SUBJECTS = {
     "1":  "mathematics",
     "2":  "science",
-    "3":  "social_science",
+    "3":  "socialscience",
     "4":  "english",
     "5":  "hindi",
     "6":  "kannada",
@@ -31,7 +31,7 @@ LANGUAGE_PROMPTS = {
     "sanskrit":     "संस्कृते उत्तरं देहि। (Respond in Sanskrit)",
     "mathematics":  "Respond in English with clear step-by-step solutions.",
     "science":      "Respond in English with clear explanations.",
-    "social_science": "Respond in English.",
+    "socialscience": "Respond in English.",
 }
 
 def select_class() -> str:

@@ -49,29 +49,38 @@ class CBSERagChain:
 
     def ask(
         self,
-        question: str,
-        class_name: str,
-        subject: str,
+        question:             str,
+        class_name:           str,
+        subject:              str,
         language_instruction: str
     ):
-        console.print(f"\n[bold yellow]🔍 Searching {class_name} → {subject}...[/bold yellow]")
+        console.print(
+            f"\n[bold yellow]🔍 Searching {class_name} → {subject}...[/bold yellow]"
+        )
 
-        top_docs = self.retriever.retrieve_and_rerank(
+        # retrieve_and_rerank now returns list of dicts with doc + confidence
+        results = self.retriever.retrieve_and_rerank(
             question,
             class_filter=class_name,
             subject_filter=subject
         )
 
-        if not top_docs:
+        if not results:
             console.print(
                 "[red]No content found for this class/subject. "
                 "Make sure PDFs are placed in the correct folder and ingested.[/red]"
             )
             return
 
+        # Extract doc objects for context building
+        top_docs = self.retriever.get_top_docs(results)
+
+        # Compute overall confidence
+        overall = self.retriever.overall_confidence(results)
+
         # Limit context size
         context_parts = []
-        total_len = 0
+        total_len     = 0
         for doc in top_docs:
             if total_len + len(doc.page_content) > 2000:
                 break
@@ -96,8 +105,8 @@ class CBSERagChain:
         except Exception as e:
             console.print(f"[red]LLM Error: {e}[/red]")
             return
-        console.print("[bold yellow]🤖 Finding images...[/bold yellow]\n")
-        # Find relevant images from same pages as source docs
+
+        # Find relevant images
         images = []
         try:
             from src.image_store import find_relevant_images
@@ -107,8 +116,14 @@ class CBSERagChain:
                 source_docs=top_docs,
                 max_images=3
             )
-        except Exception as e:
-            console.print(f" find relevant images...{e}")
-            pass  # images are optional — don't fail if this errors
-        console.print("[bold yellow]🤖 Formatting answer...[/bold yellow]\n")
-        format_answer(question, answer, top_docs, images=images)
+        except Exception:
+            pass
+
+        format_answer(
+            question=question,
+            answer=answer,
+            source_docs=top_docs,
+            images=images,
+            results=results,
+            overall_confidence=overall
+        )

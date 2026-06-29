@@ -22,7 +22,7 @@ console = Console()
 
 SUPPORTED_CLASSES  = ["class_8", "class_9", "class_10"]
 SUPPORTED_SUBJECTS = [
-    "mathematics", "science", "social_science",
+    "mathematics", "science", "socialscience",
     "english", "hindi", "kannada", "tamil", "sanskrit"
 ]
 

@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Worksheet Generator — CBSE RAG</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --surface-2: #f0ede6;
+    --border: #e0dbd0;
+    --border-strong: #c8c2b4;
+    --text-primary: #1a1a18;
+    --text-secondary: #6b6760;
+    --text-muted: #9c9890;
+    --accent: #4a7c59;
+    --accent-bg: #eef5f1;
+    --accent-border: #b8d5c4;
+    --accent-text: #2d5c3f;
+    --danger: #c0392b;
+    --danger-bg: #fdf0ee;
+    --radius: 8px;
+    --font-ui: system-ui, -apple-system, sans-serif;
+    --font: Georgia, 'Times New Roman', serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18; --surface: #242422; --surface-2: #2c2c29;
+      --border: #3a3a36; --border-strong: #4e4e49;
+      --text-primary: #f0ede6; --text-secondary: #9c9890; --text-muted: #6b6760;
+      --accent: #6aab81; --accent-bg: #1a2e22; --accent-border: #2d5c3f; --accent-text: #9ed4b4;
+      --danger-bg: #2e1a1a;
+    }
+  }
+
+  body { font-family: var(--font-ui); background: var(--bg); color: var(--text-primary); min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── NAV ── */
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem; height: 52px; display: flex; align-items: center; gap: 10px;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .logo { width: 26px; height: 26px; background: var(--accent); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 12px; flex-shrink: 0; }
+  header h1 { font-size: 14px; font-weight: 600; }
+  header .sep { color: var(--border-strong); margin: 0 2px; }
+  header nav { margin-left: auto; display: flex; gap: 4px; }
+  header nav a { font-size: 13px; padding: 5px 10px; border-radius: var(--radius); color: var(--text-secondary); text-decoration: none; transition: background 0.12s, color 0.12s; }
+  header nav a:hover { background: var(--surface-2); color: var(--text-primary); }
+  header nav a.active { background: var(--accent-bg); color: var(--accent-text); font-weight: 500; }
+
+  /* ── LAYOUT ── */
+  .layout { display: flex; flex: 1; max-width: 1280px; margin: 0 auto; width: 100%; }
+  .sidebar { width: 310px; flex-shrink: 0; padding: 1.25rem; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 1.1rem; overflow-y: auto; }
+  .main { flex: 1; padding: 1.5rem 2rem; overflow-y: auto; }
+
+  /* ── FORM ── */
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
+  select, input[type="text"], input[type="number"], textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 7px 10px; font-size: 13px;
+    font-family: var(--font-ui); color: var(--text-primary); outline: none;
+    transition: border-color .15s;
+  }
+  select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239c9890' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; padding-right: 28px; appearance: none; cursor: pointer; }
+  select:focus, input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+  textarea { resize: vertical; min-height: 60px; }
+  input[type="number"] { width: 70px; }
+
+  .tag-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag { padding: 4px 9px; border-radius: 100px; font-size: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); cursor: pointer; transition: all .12s; user-select: none; }
+  .tag:hover { border-color: var(--accent); color: var(--accent-text); }
+  .tag.on { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent-text); font-weight: 500; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px 3px 9px; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 100px; font-size: 12px; color: var(--accent-text); }
+  .chip button { background: none; border: none; cursor: pointer; padding: 0; line-height: 1; color: inherit; opacity: .6; font-size: 14px; }
+  .chip button:hover { opacity: 1; }
+
+  .count-row { display: flex; align-items: center; gap: 8px; }
+  .count-label { font-size: 13px; color: var(--text-secondary); }
+
+  .divider { height: 1px; background: var(--border); }
+
+  .btn-primary { width: 100%; padding: 9px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 13px; font-weight: 600; font-family: var(--font-ui); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: opacity .15s, transform .1s; }
+  .btn-primary:hover:not(:disabled) { opacity: .88; }
+  .btn-primary:active:not(:disabled) { transform: scale(.98); }
+  .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+
+  .btn-secondary { width: 100%; padding: 8px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-family: var(--font-ui); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background .12s, border-color .12s; }
+  .btn-secondary:hover { background: var(--surface-2); border-color: var(--border-strong); }
+
+  /* ── STATUS PANEL ── */
+  .status-panel { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .status-panel.show { display: block; }
+  .status-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+  .pulse { display: flex; gap: 3px; }
+  .pulse span { width: 5px; height: 5px; background: var(--accent); border-radius: 50%; animation: pulse 1.2s ease-in-out infinite; }
+  .pulse span:nth-child(2) { animation-delay: .2s; }
+  .pulse span:nth-child(3) { animation-delay: .4s; }
+  @keyframes pulse { 0%,80%,100%{opacity:.3;transform:scale(.8)} 40%{opacity:1;transform:scale(1)} }
+
+  .conf-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 100px; font-size: 12px; font-weight: 600; margin-top: 8px; }
+  .sources-mini { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .src-chip { font-size: 11px; padding: 3px 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 100px; color: var(--text-secondary); }
+
+  /* ── EMPTY ── */
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 420px; gap: 10px; color: var(--text-muted); text-align: center; }
+  .empty-icon { width: 52px; height: 52px; border: 2px dashed var(--border-strong); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .empty p { font-size: 13px; max-width: 230px; line-height: 1.55; }
+
+  /* ── ERROR ── */
+  .error-box { background: var(--danger-bg); border: 1px solid #e8b4b0; border-radius: var(--radius); padding: 10px 14px; font-size: 13px; color: var(--danger); margin-bottom: 1rem; }
+
+  /* ── WORKSHEET ── */
+  .worksheet { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; font-family: var(--font); }
+
+  .ws-header { background: var(--accent-bg); border-bottom: 1px solid var(--accent-border); padding: 1.25rem 1.75rem; }
+  .ws-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .ws-title { font-size: 20px; font-weight: 700; color: var(--accent-text); font-family: var(--font); }
+  .ws-sub { font-size: 12px; color: var(--accent-text); opacity: .75; margin-top: 3px; font-family: var(--font-ui); }
+  .ws-fields { display: flex; flex-direction: column; gap: 5px; min-width: 180px; }
+  .ws-field-row { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--font-ui); color: var(--accent-text); opacity: .8; }
+  .ws-field-row .fline { flex: 1; border-bottom: 1px solid var(--accent-border); height: 14px; min-width: 90px; }
+
+  .ws-body { padding: 1.25rem 1.75rem; }
+  .ws-instructions { font-size: 12px; color: var(--text-secondary); background: var(--surface-2); border-radius: var(--radius); padding: 9px 12px; margin-bottom: 1.25rem; font-family: var(--font-ui); line-height: 1.5; border-left: 3px solid var(--accent); }
+
+  .section-heading { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); font-family: var(--font-ui); margin: 1.25rem 0 10px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
+
+  .q-block { margin-bottom: 1.25rem; }
+  .q-num { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--accent-text); background: var(--accent-bg); padding: 2px 7px; border-radius: 100px; display: inline-block; margin-bottom: 5px; font-family: var(--font-ui); }
+  .q-text { font-size: 14px; color: var(--text-primary); line-height: 1.6; margin-bottom: 8px; }
+
+  .ans-lines { display: flex; flex-direction: column; gap: 7px; margin-top: 6px; }
+  .ans-line { height: 1px; background: var(--border-strong); }
+
+  .mcq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 6px; }
+  .mcq-opt { display: flex; align-items: flex-start; gap: 7px; font-size: 13px; color: var(--text-primary); line-height: 1.45; }
+  .opt-circle { width: 18px; height: 18px; border: 1.5px solid var(--border-strong); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: var(--text-secondary); flex-shrink: 0; font-family: var(--font-ui); }
+
+  .tf-row { display: flex; gap: 1.25rem; margin-top: 6px; }
+  .tf-opt { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-primary); font-family: var(--font-ui); }
+  .tf-circle { width: 18px; height: 18px; border: 1.5px solid var(--border-strong); border-radius: 50%; flex-shrink: 0; }
+
+  .fillblank-text { font-size: 14px; line-height: 2.1; color: var(--text-primary); }
+  .blank { display: inline-block; border-bottom: 1.5px solid var(--border-strong); min-width: 90px; margin: 0 3px; }
+
+  .ws-footer { display: flex; justify-content: flex-end; gap: 1.5rem; padding: .9rem 1.75rem; border-top: 1px solid var(--border); }
+  .score-field { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--font-ui); color: var(--text-muted); }
+  .score-line { width: 70px; border-bottom: 1px solid var(--border-strong); height: 13px; }
+
+  @media print {
+    header, .sidebar, .status-panel, #print-btn, #regen-btn { display: none !important; }
+    .main { padding: 0; }
+    .worksheet { border: none; border-radius: 0; }
+    body { background: white; }
+    .ws-header { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">W</div>
+  <h1>CBSE RAG</h1>
+  <span class="sep">/</span>
+  <span style="font-size:13px;color:var(--text-secondary)">Worksheet Generator</span>
+  <nav>
+    <a href="/">Chat</a>
+    <a href="/upload">Upload</a>
+    <a href="/quiz">Quiz</a>
+    <a href="/worksheet" class="active">Worksheet</a>
+  </nav>
+</header>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <div class="field">
+      <label>Class</label>
+      <select id="class-sel">
+        <option value="">Loading…</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Subject</label>
+      <select id="subject-sel" disabled>
+        <option value="">Select class first</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Chapter / Topic</label>
+      <input type="text" id="topic-input" placeholder="Type topic and press Enter…" />
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <div class="field">
+      <label>Question types</label>
+      <div class="tag-row" id="q-types">
+        <div class="tag on" data-v="mcq">Multiple choice</div>
+        <div class="tag on" data-v="short">Short answer</div>
+        <div class="tag" data-v="truefalse">True / false</div>
+        <div class="tag" data-v="fillblank">Fill in blank</div>
+        <div class="tag" data-v="long">Essay / long</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Difficulty</label>
+      <div class="tag-row" id="difficulty">
+        <div class="tag" data-v="easy">Easy</div>
+        <div class="tag on" data-v="medium">Medium</div>
+        <div class="tag" data-v="hard">Hard</div>
+        <div class="tag" data-v="mixed">Mixed</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Number of questions</label>
+      <div class="count-row">
+        <input type="number" id="q-count" value="10" min="3" max="30" />
+        <span class="count-label">questions</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Extra instructions</label>
+      <textarea id="extra" placeholder="e.g. Focus on diagrams, include real-life examples…"></textarea>
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="btn-primary" id="gen-btn" onclick="generate()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      Generate worksheet
+    </button>
+
+    <button class="btn-secondary" id="print-btn" onclick="window.print()" style="display:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print worksheet
+    </button>
+
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- Status panel -->
+    <div class="status-panel" id="status-panel">
+      <div class="status-row">
+        <div class="pulse"><span></span><span></span><span></span></div>
+        <span id="status-msg">Searching textbooks…</span>
+      </div>
+      <div id="conf-area"></div>
+      <div class="sources-mini" id="src-mini"></div>
+    </div>
+
+    <!-- Error -->
+    <div class="error-box" id="err-box" style="display:none"></div>
+
+    <!-- Empty -->
+    <div class="empty" id="empty">
+      <div class="empty-icon">📋</div>
+      <p>Select class, subject and topics on the left, then generate a printable worksheet straight from your NCERT textbooks.</p>
+    </div>
+
+    <!-- Worksheet output -->
+    <div id="ws-out"></div>
+
+  </main>
+</div>
+
+<script>
+const API = '';  // same-origin — FastAPI serves this file at /worksheet
+
+/* ── topics ── */
+const topics = [];
+const topicInput = document.getElementById('topic-input');
+topicInput.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ',') && topicInput.value.trim()) {
+    e.preventDefault(); addTopic(topicInput.value.trim()); topicInput.value = '';
+  }
+});
+topicInput.addEventListener('blur', () => {
+  if (topicInput.value.trim()) { addTopic(topicInput.value.trim()); topicInput.value = ''; }
+});
+function addTopic(t) {
+  if (!topics.includes(t)) { topics.push(t); renderChips(); }
+}
+function removeTopic(t) {
+  const i = topics.indexOf(t); if (i > -1) { topics.splice(i, 1); renderChips(); }
+}
+function renderChips() {
+  document.getElementById('chips').innerHTML = topics.map(t =>
+    `<span class="chip">${t}<button onclick="removeTopic('${t.replace(/'/g,"\\'")}')">×</button></span>`
+  ).join('');
+}
+
+/* ── tag toggles ── */
+document.querySelectorAll('#q-types .tag').forEach(t => t.addEventListener('click', () => t.classList.toggle('on')));
+document.querySelectorAll('#difficulty .tag').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('#difficulty .tag').forEach(x => x.classList.remove('on'));
+  t.classList.add('on');
+}));
+
+/* ── load classes from API ── */
+async function loadClasses() {
+  try {
+    const r = await fetch(`${API}/api/classes`);
+    const d = await r.json();
+    const sel = document.getElementById('class-sel');
+    sel.innerHTML = '<option value="">Select class…</option>' +
+      d.classes.map(c => `<option value="${c.id}">${c.label}</option>`).join('');
+    sel.addEventListener('change', loadSubjects);
+  } catch(e) {
+    document.getElementById('class-sel').innerHTML = '<option value="">API unavailable</option>';
+  }
+}
+
+async function loadSubjects() {
+  const cls = document.getElementById('class-sel').value;
+  const sel = document.getElementById('subject-sel');
+  if (!cls) { sel.innerHTML = '<option value="">Select class first</option>'; sel.disabled = true; return; }
+  sel.innerHTML = '<option value="">Loading…</option>'; sel.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/subjects/${cls}`);
+    const d = await r.json();
+    sel.innerHTML = '<option value="">Select subject…</option>' +
+      d.subjects.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+    sel.disabled = false;
+  } catch(e) {
+    sel.innerHTML = '<option value="">Error loading subjects</option>';
+  }
+}
+
+loadClasses();
+
+/* ── generate ── */
+async function generate() {
+  // Collect topics
+  if (topicInput.value.trim()) { addTopic(topicInput.value.trim()); topicInput.value = ''; }
+  if (topics.length === 0) { highlight(topicInput); return; }
+
+  const cls     = document.getElementById('class-sel').value;
+  const subject = document.getElementById('subject-sel').value;
+  if (!cls)     { highlight(document.getElementById('class-sel')); return; }
+  if (!subject) { highlight(document.getElementById('subject-sel')); return; }
+
+  const qTypes = [...document.querySelectorAll('#q-types .tag.on')].map(t => t.dataset.v);
+  if (qTypes.length === 0) { alert('Select at least one question type.'); return; }
+
+  const difficulty = document.querySelector('#difficulty .tag.on')?.dataset.v || 'medium';
+  const count      = parseInt(document.getElementById('q-count').value) || 10;
+  const extra      = document.getElementById('extra').value.trim();
+
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.innerHTML = `<div class="pulse"><span></span><span></span><span></span></div> Generating…`;
+
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('err-box').style.display = 'none';
+  document.getElementById('ws-out').innerHTML = '';
+  document.getElementById('print-btn').style.display = 'none';
+
+  const sp = document.getElementById('status-panel');
+  sp.classList.add('show');
+  document.getElementById('conf-area').innerHTML = '';
+  document.getElementById('src-mini').innerHTML = '';
+  setStatus('Connecting to NCERT knowledge base…');
+
+  const body = {
+    class_name: cls, subject, topics, difficulty,
+    question_types: qTypes, num_questions: count,
+    max_context: 3000, extra_instructions: extra
+  };
+
+  try {
+    const res = await fetch(`${API}/api/generate-worksheet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const reader = res.body.getReader();
+    const dec    = new TextDecoder();
+    let buf      = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const ev = JSON.parse(line.slice(6));
+          handleEvent(ev, cls, subject, difficulty);
+        } catch {}
+      }
+    }
+  } catch(e) {
+    showError(`Connection error: ${e.message}. Is the FastAPI server running?`);
+    sp.classList.remove('show');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Generate worksheet`;
+}
+
+function handleEvent(ev, cls, subject, difficulty) {
+  if (ev.type === 'status')     { setStatus(ev.message); }
+  if (ev.type === 'progress')   { /* streaming tokens — not shown */ }
+  if (ev.type === 'confidence') {
+    document.getElementById('conf-area').innerHTML =
+      `<div class="conf-badge" style="background:${hexAlpha(ev.color,.15)};color:${ev.color};border:1px solid ${hexAlpha(ev.color,.3)}">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="${ev.color}"><circle cx="12" cy="12" r="10"/></svg>
+        Source confidence: ${ev.score}% — ${ev.label}
+       </div>`;
+  }
+  if (ev.type === 'sources') {
+    const mini = document.getElementById('src-mini');
+    mini.innerHTML = ev.data.slice(0,6).map(s =>
+      `<span class="src-chip">${basename(s.file)} p.${s.page} <span style="color:${s.color}">${s.label}</span></span>`
+    ).join('');
+  }
+  if (ev.type === 'error') {
+    showError(ev.message);
+    document.getElementById('status-panel').classList.remove('show');
+  }
+  if (ev.type === 'worksheet') {
+    document.getElementById('status-panel').classList.remove('show');
+    renderWorksheet(ev.data, cls, subject, difficulty);
+    document.getElementById('print-btn').style.display = 'flex';
+  }
+  if (ev.type === 'done') {
+    document.getElementById('status-panel').classList.remove('show');
+  }
+}
+
+/* ── render worksheet ── */
+function renderWorksheet(ws, cls, subject, difficulty) {
+  let qIdx = 0;
+  const sections = (ws.sections || []).map(sec => {
+    const qs = (sec.questions || []).map(q => { qIdx++; return renderQ(q, qIdx); }).join('');
+    return `<div class="section-heading">${sec.sectionTitle}</div>${qs}`;
+  }).join('');
+
+  const total = qIdx;
+  document.getElementById('ws-out').innerHTML = `
+    <div class="worksheet">
+      <div class="ws-header">
+        <div class="ws-top">
+          <div>
+            <div class="ws-title">${ws.title || 'Worksheet'}</div>
+            <div class="ws-sub">${ws.subtitle || ''} &nbsp;·&nbsp; ${fmt(cls)} &nbsp;·&nbsp; ${fmt(subject)} &nbsp;·&nbsp; ${difficulty}</div>
+          </div>
+          <div class="ws-fields">
+            <div class="ws-field-row">Name: <div class="fline"></div></div>
+            <div class="ws-field-row">Date: <div class="fline"></div></div>
+            <div class="ws-field-row">Roll No: <div class="fline"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="ws-body">
+        <div class="ws-instructions">📌 ${ws.instructions || 'Answer all questions.'}</div>
+        ${sections}
+      </div>
+      <div class="ws-footer">
+        <div class="score-field">Score: <div class="score-line"></div> / ${total}</div>
+        <div class="score-field">Teacher: <div class="score-line" style="width:100px"></div></div>
+      </div>
+    </div>`;
+}
+
+function renderQ(q, i) {
+  let body = '';
+  if (q.type === 'mcq') {
+    const opts = (q.options || []).map((o, idx) =>
+      `<div class="mcq-opt"><div class="opt-circle">${['A','B','C','D'][idx]}</div><span>${o.replace(/^[A-D][\.\)]\s*/i,'')}</span></div>`
+    ).join('');
+    body = `<div class="mcq-grid">${opts}</div>`;
+  } else if (q.type === 'short') {
+    body = `<div class="ans-lines">${'<div class="ans-line"></div>'.repeat(3)}</div>`;
+  } else if (q.type === 'long') {
+    body = `<div class="ans-lines">${'<div class="ans-line"></div>'.repeat(7)}</div>`;
+  } else if (q.type === 'truefalse') {
+    body = `<div class="tf-row"><div class="tf-opt"><div class="tf-circle"></div>True</div><div class="tf-opt"><div class="tf-circle"></div>False</div></div>`;
+  } else if (q.type === 'fillblank') {
+    const html = (q.text || '').replace(/___/g, '<span class="blank">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>');
+    return `<div class="q-block"><span class="q-num">Q${i}</span><div class="fillblank-text">${html}</div></div>`;
+  }
+  return `<div class="q-block"><span class="q-num">Q${i}</span><div class="q-text">${q.text}</div>${body}</div>`;
+}
+
+/* ── helpers ── */
+function setStatus(msg) { document.getElementById('status-msg').textContent = msg; }
+function showError(msg) {
+  const b = document.getElementById('err-box');
+  b.textContent = msg; b.style.display = 'block';
+}
+function highlight(el) {
+  el.style.borderColor = '#c0392b';
+  el.focus();
+  setTimeout(() => el.style.borderColor = '', 1500);
+}
+function fmt(s) { return (s || '').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()); }
+function basename(p) { return (p || '').split('/').pop().split('\\').pop(); }
+function hexAlpha(hex, a) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+</script>
+</body>
+</html>
