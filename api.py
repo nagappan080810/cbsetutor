@@ -128,46 +128,8 @@ QUESTION: {question}
 
 ANSWER:"""
 
-# ── Lazy singletons ───────────────────────────────────────────────────────────
-_retriever = None
-_llm       = None
-
-def get_retriever():
-    global _retriever
-    if _retriever is None:
-        from src.retriever import CBSERetriever
-        _retriever = CBSERetriever()
-    return _retriever
-
-def get_llm():
-    global _llm
-    if _llm is None:
-        provider = os.getenv("LLM_PROVIDER", "groq")
-        if provider == "groq":
-            from langchain_groq import ChatGroq
-            _llm = ChatGroq(
-                model=os.getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
-                api_key=os.getenv("GROQ_API_KEY"),
-                temperature=0.1,
-                max_tokens=2048,
-            )
-        elif provider == "deepseek":
-            from langchain_openai import ChatOpenAI
-            _llm = ChatOpenAI(
-                model="deepseek-chat",
-                api_key=os.getenv("DEEPSEEK_API_KEY"),
-                base_url="https://api.deepseek.com",
-                temperature=0.1,
-                max_tokens=2048,
-            )
-        elif provider == "gemini":
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            _llm = ChatGoogleGenerativeAI(
-                model=os.getenv("LLM_MODEL", "gemini-2.0-flash"),
-                google_api_key=os.getenv("GEMINI_API_KEY"),
-                temperature=0.1,
-            )
-    return _llm
+# ── Shared RAG chain (retriever + LLM, provider selection lives in one place) ──
+from src.rag_chain import get_rag_chain
 
 # ── Request models ────────────────────────────────────────────────────────────
 class AskRequest(BaseModel):
@@ -263,7 +225,7 @@ async def answer_stream(req: AskRequest) -> AsyncGenerator[str, None]:
 
     # Retrieve + re-rank (returns list of dicts)
     try:
-        retriever = get_retriever()
+        retriever = get_rag_chain().retriever
         results   = retriever.retrieve_and_rerank(
             req.question,
             class_filter=req.class_name,
@@ -279,7 +241,7 @@ async def answer_stream(req: AskRequest) -> AsyncGenerator[str, None]:
     top_docs = [r["doc"] for r in results]
 
     # Compute overall confidence (weighted average)
-    console.print(f" results {results}")
+    console.print(f"answer_stream results {results}")
     weights  = [1.0, 0.8, 0.6, 0.4, 0.2]
     total_w  = sum(weights[i] if i < len(weights) else 0.1 for i in range(len(results)))
     total_s  = sum(
@@ -352,14 +314,17 @@ async def answer_stream(req: AskRequest) -> AsyncGenerator[str, None]:
     # ── Stream tokens ─────────────────────────────────────────────────────────
     try:
         from langchain_core.messages import HumanMessage
-        async for chunk in get_llm().astream([HumanMessage(content=prompt)]):
-            token = chunk.content
-            if token:
-                visible = re.sub(r"<think>.*", "", token, flags=re.DOTALL)
-                if visible:
-                    yield sse({"type":"token","data":visible})
-                    await asyncio.sleep(0)
+        # NOTE: previously this sent req.question directly, bypassing the
+        # `prompt` built above entirely -- meaning the retrieved textbook
+        # context and anti-hallucination rules were never actually reaching
+        # the model here. Fixed to use `prompt`.
+        async for token in get_rag_chain().astream_with_tools([HumanMessage(content=prompt)]):
+            visible = re.sub(r"<think>.*", "", token, flags=re.DOTALL)
+            if visible:
+                yield sse({"type":"token","data":visible})
+                await asyncio.sleep(0)
     except Exception as e:
+        console.print(f"error {e}")
         yield sse({"type":"error","message":f"LLM error: {e}"}); return
 
     # ── Send images ───────────────────────────────────────────────────────────
@@ -378,19 +343,53 @@ async def answer_stream(req: AskRequest) -> AsyncGenerator[str, None]:
     yield sse({"type":"done","message":"Answer complete","answer_mode":req.answer_mode})
 
 # ── Worksheet SSE generator ───────────────────────────────────────────────────
+
+# Explicit Bloom's taxonomy guidance per difficulty so the LLM never
+# defaults to recall-level questions regardless of what difficulty is set.
+DIFFICULTY_GUIDANCE = {
+    "easy": """DIFFICULTY — EASY (Bloom's Level 1-2: Remember & Understand)
+- Ask students to recall facts, define terms, identify, label, or list.
+- MCQ distractors should be clearly wrong — not tricky.
+- Short answers need only 1-2 sentences.
+- Fill-in-the-blank should have obvious answers directly from the text.
+- Avoid inference, calculation, or multi-step reasoning entirely.
+- Verbs to use: define, list, state, name, identify, recall, label.""",
+
+    "medium": """DIFFICULTY — MEDIUM (Bloom's Level 3-4: Apply & Analyse)
+- Ask students to explain why/how, compare, classify, or solve.
+- MCQ distractors must be plausible — students need real understanding to rule them out.
+- Short answers need 3-5 sentences with explanation or an example.
+- Include at least one calculation or step-by-step problem where subject allows.
+- Verbs to use: explain, compare, classify, solve, demonstrate, differentiate, calculate.""",
+
+    "hard": """DIFFICULTY — HARD (Bloom's Level 5-6: Evaluate & Create)
+- Ask students to evaluate arguments, justify decisions, predict outcomes, or design solutions.
+- MCQ should have 2-3 highly plausible distractors requiring deep reasoning to eliminate.
+- Short/long answers must require multi-step reasoning, inference from data, or real-world application.
+- Include scenario-based or case-study style questions.
+- Require linking concepts across sections or chapters where possible.
+- Verbs to use: evaluate, justify, predict, design, critique, infer, hypothesize, analyse.""",
+
+    "mixed": """DIFFICULTY — MIXED (all Bloom's levels)
+- Distribute: ~30% easy (recall), ~40% medium (apply/analyse), ~30% hard (evaluate/create).
+- Do NOT make all questions the same difficulty — genuine variety across levels is mandatory.
+- Progress from simpler to more challenging within each section where possible.""",
+}
+
 WORKSHEET_PROMPT = """You are an expert CBSE question paper setter for {class_name}, subject: {subject}.
 
 {language_instruction}
 
 Use ONLY the context below from NCERT textbooks to create worksheet questions.
-If the context is insufficient for some question types, draw from closely related NCERT concepts.
+If context is insufficient, draw from closely related NCERT concepts on the same topic.
 
 TASK: Generate exactly {num_questions} worksheet questions on the topic(s): {topics}
-Difficulty: {difficulty}
 Question types to include (distribute evenly): {question_types}
 {extra}
 
-STRICT JSON OUTPUT — return ONLY this structure, no markdown fences, no preamble:
+{difficulty_guidance}
+
+STRICT JSON OUTPUT — return ONLY this JSON object, no markdown fences, no preamble:
 {{
   "title": "Worksheet title",
   "subtitle": "Brief topic description",
@@ -425,12 +424,32 @@ STRICT JSON OUTPUT — return ONLY this structure, no markdown fences, no preamb
   ]
 }}
 
-Rules:
+HARD RULES — violating any makes output invalid:
 - Group questions by type into separate sections
-- MCQ must have exactly 4 options labeled A–D, one must be correct
-- Fill-in-the-blank must use ___ in the sentence for each blank
-- Questions must be directly based on the CONTEXT below
+- MCQ must have exactly 4 options labeled A–D; exactly one must be correct
+- Fill-in-the-blank must place ___ in the sentence for each blank
+- Questions must be grounded in the CONTEXT below
 - Age-appropriate for {class_name}
+- STRICTLY follow the difficulty guidance above — never default to easy recall questions
+- NO DUPLICATE QUESTIONS: every question must test a DIFFERENT fact, concept, or skill.
+  Do not ask the same thing twice even with different wording.
+  Before writing each question, check it does not overlap with any previous question.
+- NO REPETITION OF STEM: question stems must not start with the same phrase
+- SPREAD ACROSS CONTEXT: draw questions from DIFFERENT sections of the context —
+  do not pull all questions from the same paragraph or section heading
+- LANGUAGE SUBJECT NOTE: The context is tagged with [lang_sub_type] and [sentence_class].
+  Use these tags to create appropriate question formats:
+    • [grammar_rule] + [grammar_example] → grammar MCQ, fill-in-blank, rewrite questions
+    • [grammar_exercise] → use the exercise format directly (fill blanks, rewrite, match)
+    • [comprehension] + [comprehension_question] → passage-based questions with sub-questions
+    • [short_answer_q] + [short_sentence] → 1-2 sentence answer questions
+    • [long_answer_q] + [passage] → paragraph / essay questions
+    • [vocabulary] + [word_list] → synonym/antonym/match-the-word MCQ or fill-blank
+    • [dialogue] → complete-the-dialogue or conversation-based questions
+    • [letter_writing] / [essay_writing] / [report_writing] / [speech] → writing prompts
+    • [poem] → comprehension, appreciation, or stanza-based questions
+    • [story] → character, theme, sequence questions
+    • [translation] → translate-the-sentence questions
 
 ---
 CONTEXT:
@@ -456,11 +475,48 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
     yield sse({"type":"status","message":"Searching NCERT textbooks for relevant content…"})
     await asyncio.sleep(0)
 
-    # Retrieve context for each topic and merge
+    # ── Bloom level target for this difficulty ────────────────────────────────
+    BLOOM_FOR_DIFFICULTY = {
+        "easy":   {"remember", "understand"},
+        "medium": {"understand", "apply", "analyse"},
+        "hard":   {"analyse", "evaluate"},
+        "mixed":  {"remember", "understand", "apply", "analyse", "evaluate"},
+    }
+    # Content types most useful for worksheet generation (ordered by priority)
+    PREFERRED_TYPES = [
+        "question", "answer", "example", "definition",
+        "fact", "formula", "summary", "body",
+        "exercise", "note", "activity", "table",
+        "figure_ref", "introduction",
+    ]
+    # For language subjects — which lang_sub_types are richest for worksheet generation
+    LANG_PREFERRED_TYPES = [
+        "grammar_exercise", "comprehension_question", "short_answer_q",
+        "long_answer_q", "comprehension", "grammar_rule", "grammar_example",
+        "vocabulary", "dialogue", "letter_writing", "essay_writing",
+        "story", "poem", "summary_passage", "translation",
+        "note_making", "report_writing", "speech", "body",
+    ]
+    # sentence_class preferences by question_type requested
+    SENTENCE_CLASS_FOR_QTYPE = {
+        "short":     {"short_sentence", "long_sentence"},
+        "fillblank": {"short_sentence", "word_list"},
+        "long":      {"passage", "long_sentence"},
+        "mcq":       {"short_sentence", "long_sentence", "passage"},
+        "truefalse": {"short_sentence", "long_sentence"},
+    }
+
+    _LANG_SUBJECTS = {"english", "hindi", "kannada", "tamil", "sanskrit"}
+    is_lang_subject = req.subject in _LANG_SUBJECTS
+    target_blooms   = BLOOM_FOR_DIFFICULTY.get(req.difficulty, BLOOM_FOR_DIFFICULTY["mixed"])
+
+    # ── Retrieve for each topic ───────────────────────────────────────────────
     try:
-        retriever = get_retriever()
+        retriever = get_rag_chain().retriever
         all_results = []
-        seen_keys = set()
+        seen_keys        = set()   # dedup by source+page
+        seen_fingerprints = set()  # dedup by content similarity (first 120 chars)
+
         for topic in req.topics:
             results = retriever.retrieve_and_rerank(
                 topic,
@@ -470,8 +526,12 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
             for r in results:
                 doc = r["doc"]
                 key = f"{doc.metadata.get('source','')}:{doc.metadata.get('page','')}"
-                if key not in seen_keys:
+                # Content fingerprint — skip chunks whose first 120 chars match
+                # (catches the same passage split across two chunks)
+                fp = doc.page_content[:120].strip().lower()
+                if key not in seen_keys and fp not in seen_fingerprints:
                     seen_keys.add(key)
+                    seen_fingerprints.add(fp)
                     all_results.append(r)
     except Exception as e:
         yield sse({"type":"error","message":f"Retrieval error: {e}"}); return
@@ -479,7 +539,50 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
     if not all_results:
         yield sse({"type":"error","message":"No relevant content found. Make sure PDFs are ingested for this class/subject."}); return
 
-    # Overall confidence
+    # ── Re-rank results by metadata quality for worksheet use ─────────────────
+    def _ws_score(r: dict) -> float:
+        doc  = r["doc"]
+        meta = doc.metadata
+        base = r["confidence"]
+
+        # Bloom level match boost
+        bloom = meta.get("bloom_level", "remember")
+        bloom_boost = 15.0 if bloom in target_blooms else 0.0
+
+        # Strongly deprioritise in-text questions (not exam-appropriate)
+        loc = meta.get("question_location", "body")
+        loc_penalty = -20.0 if loc == "intext" else (5.0 if loc == "exercise" else 0.0)
+
+        # Penalise chunks that require a diagram (can't answer in text worksheet)
+        diagram_penalty = -10.0 if meta.get("requires_diagram") else 0.0
+
+        if is_lang_subject:
+            lst = meta.get("lang_sub_type", "body")
+            try:    type_rank = LANG_PREFERRED_TYPES.index(lst)
+            except: type_rank = len(LANG_PREFERRED_TYPES)
+            type_boost = max(0, (len(LANG_PREFERRED_TYPES) - type_rank) * 2.0)
+
+            sc = meta.get("sentence_class", "")
+            sc_boost = 0.0
+            for qt in req.question_types:
+                if sc in SENTENCE_CLASS_FOR_QTYPE.get(qt, set()):
+                    sc_boost = max(sc_boost, 8.0)
+            formula_boost = 0.0
+        else:
+            ctype = meta.get("content_type", "body")
+            try:    type_rank = PREFERRED_TYPES.index(ctype)
+            except: type_rank = len(PREFERRED_TYPES)
+            type_boost = max(0, (len(PREFERRED_TYPES) - type_rank) * 1.5)
+            sc_boost   = 0.0
+            formula_boost = 3.0 if meta.get("has_formula") and req.subject in (
+                "mathematics", "science", "physics", "chemistry"
+            ) else 0.0
+
+        return base + bloom_boost + type_boost + sc_boost + formula_boost + loc_penalty + diagram_penalty
+
+    all_results.sort(key=_ws_score, reverse=True)
+
+    # ── Overall confidence ────────────────────────────────────────────────────
     weights  = [1.0, 0.8, 0.6, 0.4, 0.2]
     total_w  = sum(weights[i] if i < len(weights) else 0.1 for i in range(len(all_results)))
     total_s  = sum(
@@ -496,44 +599,72 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
     })
     await asyncio.sleep(0)
 
-    # Send sources
-    seen = set()
+    # ── Send enriched sources to UI ───────────────────────────────────────────
+    seen    = set()
     sources = []
     for r in all_results:
         doc  = r["doc"]
-        src  = doc.metadata.get("source","Unknown")
-        page = doc.metadata.get("page","?")
+        meta = doc.metadata
+        src  = meta.get("source","Unknown")
+        page = meta.get("page","?")
         k    = f"{src}-{page}"
         if k not in seen:
             seen.add(k)
             sources.append({
-                "file":       os.path.basename(src),
-                "page":       page,
-                "preview":    doc.page_content[:100].replace("\n"," "),
-                "confidence": r["confidence"],
-                "label":      r["label"],
-                "color":      confidence_color(r["confidence"]),
+                "file":         os.path.basename(src),
+                "page":         page,
+                "chapter":      meta.get("chapter",""),
+                "section":      meta.get("section",""),
+                "content_type": meta.get("content_type","body"),
+                "bloom_level":  meta.get("bloom_level",""),
+                "preview":      doc.page_content[:120].replace("\n"," "),
+                "confidence":   r["confidence"],
+                "label":        r["label"],
+                "color":        confidence_color(r["confidence"]),
             })
     yield sse({"type":"sources","data":sources})
     await asyncio.sleep(0)
 
-    # Build context from top docs
+    # ── Build context — ensure section diversity to prevent duplicate Qs ─────
     top_docs = [r["doc"] for r in all_results]
     context_parts, total_len = [], 0
+    seen_sections = {}   # section → count; cap at 2 chunks per section
+
     for doc in top_docs:
-        if total_len + len(doc.page_content) > req.max_context: break
-        context_parts.append(doc.page_content)
+        if total_len + len(doc.page_content) > req.max_context:
+            break
+        meta    = doc.metadata
+        section = meta.get("section") or meta.get("chapter") or "root"
+
+        # Allow at most 2 chunks from the same section to force topic spread
+        if seen_sections.get(section, 0) >= 2:
+            continue
+        seen_sections[section] = seen_sections.get(section, 0) + 1
+
+        header_parts = []
+        if meta.get("chapter"):       header_parts.append(meta["chapter"])
+        if meta.get("section"):       header_parts.append(meta["section"])
+        if meta.get("subsection"):    header_parts.append(meta["subsection"])
+        if meta.get("content_type"):  header_parts.append(f"[{meta['content_type']}]")
+        if meta.get("science_domain"):header_parts.append(f"[{meta['science_domain']}]")
+        if meta.get("social_domain"): header_parts.append(f"[{meta['social_domain']}]")
+        if meta.get("lang_sub_type"): header_parts.append(f"[{meta['lang_sub_type']}]")
+        if meta.get("sentence_class"):header_parts.append(f"[{meta['sentence_class']}]")
+        if meta.get("bloom_level"):   header_parts.append(f"[bloom:{meta['bloom_level']}]")
+        if meta.get("question_location") == "exercise": header_parts.append("[exercise_question]")
+
+        header = " | ".join(header_parts)
+        part   = (f"{header}\n{doc.page_content}") if header else doc.page_content
+        context_parts.append(part)
+        total_len += len(doc.page_content)
+        header = " | ".join(header_parts)
+        part   = (f"{header}\n{doc.page_content}") if header else doc.page_content
+        context_parts.append(part)
         total_len += len(doc.page_content)
     context = "\n\n---\n\n".join(context_parts)
 
     lang_ins = LANGUAGE_INSTRUCTIONS.get(req.subject, "Respond in English.")
 
-    difficulty_map = {
-        "easy":   "Easy — basic recall and definitions",
-        "medium": "Medium — application and understanding",
-        "hard":   "Hard — analysis, inference, and higher-order thinking",
-        "mixed":  "Mixed — a blend of easy, medium, and hard questions",
-    }
     qtype_labels = {
         "mcq":"Multiple Choice","short":"Short Answer",
         "truefalse":"True/False","fillblank":"Fill in the Blank","long":"Long Answer/Essay"
@@ -545,7 +676,7 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
         language_instruction=lang_ins,
         num_questions=req.num_questions,
         topics=", ".join(req.topics),
-        difficulty=difficulty_map.get(req.difficulty, req.difficulty),
+        difficulty_guidance=DIFFICULTY_GUIDANCE.get(req.difficulty, DIFFICULTY_GUIDANCE["medium"]),
         question_types=", ".join(qtype_labels.get(t, t) for t in req.question_types),
         extra=f"Extra instructions: {req.extra_instructions}" if req.extra_instructions else "",
         context=context,
@@ -558,12 +689,10 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
     full_response = ""
     try:
         from langchain_core.messages import HumanMessage
-        async for chunk in get_llm().astream([HumanMessage(content=prompt)]):
-            token = chunk.content
-            if token:
-                full_response += token
-                yield sse({"type":"progress","data":token})
-                await asyncio.sleep(0)
+        async for token in get_rag_chain().astream_with_tools([HumanMessage(content=prompt)]):
+            full_response += token
+            yield sse({"type":"progress","data":token})
+            await asyncio.sleep(0)
     except Exception as e:
         yield sse({"type":"error","message":f"LLM error: {e}"}); return
 
@@ -616,7 +745,7 @@ def health():
         "status":         "ok",
         "chroma_db":      os.path.exists(CHROMA_DIR),
         "data_dir":       os.path.exists(DATA_DIR),
-        "llm_provider":   os.getenv("LLM_PROVIDER","groq"),
+        "llm_provider":   os.getenv("LLM_PROVIDER","deepseek"),
         "embed_provider": os.getenv("EMBED_PROVIDER","ollama"),
     }
 
@@ -776,7 +905,7 @@ PAPER:
 {text[:6000]}"""
 
         from langchain_core.messages import HumanMessage
-        response = await get_llm().ainvoke([HumanMessage(content=extraction_prompt)])
+        response = await get_rag_chain().llm.ainvoke([HumanMessage(content=extraction_prompt)])
         raw = re.sub(r"^```(?:json)?","",response.content.strip()).strip()
         raw = re.sub(r"```$","",raw).strip()
 

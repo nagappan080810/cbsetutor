@@ -254,6 +254,736 @@ def select_files_interactive(
 
     return result
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# SEMANTIC METADATA ENRICHMENT
+# Every chunk in ChromaDB gets rich metadata so retrieval can filter by
+# content type, chapter, section, difficulty signal, and more.
+#
+# Metadata fields stored per chunk:
+#   source          – PDF filename
+#   class           – e.g. "class_10"
+#   subject         – e.g. "science"
+#   page            – 0-based page number
+#   chapter         – "Chapter 1 – Chemical Reactions"
+#   chapter_num     – 1  (int, for ordering/filtering)
+#   section         – "1.2 Types of Chemical Reactions"
+#   subsection      – "1.2.1 Combination Reactions"
+#   content_type    – one of:
+#                       "question"      – exercise / textbook question
+#                       "answer"        – worked example or solved answer
+#                       "definition"    – "X is defined as …"
+#                       "fact"          – declarative factual statement
+#                       "summary"       – chapter summary / key points
+#                       "example"       – "Example:" block
+#                       "formula"       – contains mathematical formula
+#                       "table"         – tabular data
+#                       "figure_ref"    – refers to a diagram/figure
+#                       "activity"      – lab / activity / do-it-yourself
+#                       "note"          – callout box / think & discuss
+#                       "exercise"      – end-of-chapter exercises
+#                       "introduction"  – chapter/section intro text
+#                       "body"          – general body text (fallback)
+#   has_formula     – bool: chunk contains a math/chemical formula
+#   has_table       – bool: chunk appears to contain tabular data
+#   has_figure_ref  – bool: chunk references a Figure/Diagram
+#   keyword_hints   – comma-separated top-5 content words (for debug/search)
+#   bloom_level     – estimated Bloom's level: "remember","understand",
+#                     "apply","analyse","evaluate" (helps difficulty routing)
+#   word_count      – word count of the chunk
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import re as _re
+import math as _math
+from collections import Counter as _Counter
+
+# ── Pattern library ───────────────────────────────────────────────────────────
+
+# Chapter heading: "Chapter 1", "CHAPTER 3 – Motion", "1. Motion"
+_RE_CHAPTER = _re.compile(
+    r"^(?:chapter\s+(\d{1,2})[\s:–\-]*(.*?)|(\d{1,2})\.\s+([A-Z][A-Za-z ,\-&'/]+))$",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+# Section: "1.1 Introduction", "2.3 Types of Motion"
+_RE_SECTION = _re.compile(
+    r"^(\d{1,2})\.(\d{1,2})\s+([A-Z][A-Za-z ,\-&'()/]+)$",
+    _re.MULTILINE,
+)
+# Subsection: "1.2.1 Combination Reactions"
+_RE_SUBSECTION = _re.compile(
+    r"^(\d{1,2}\.\d{1,2}\.\d{1,2})\s+([A-Z][A-Za-z ,\-&'()/]+)$",
+    _re.MULTILINE,
+)
+
+# Content-type signal patterns
+_RE_QUESTION    = _re.compile(
+    r"(?:^|\n)\s*(?:Q\.?\s*\d+|question\s+\d+|\d+\.\s+(?:what|why|how|when|where|who|which|define|explain|describe|state|list|give|find|calculate|solve|show|prove|draw|name|differentiate|compare|discuss|write))",
+    _re.IGNORECASE,
+)
+_RE_THINK_Q     = _re.compile(
+    r"(?:think\s+and\s+(?:discuss|answer)|in-text\s+question|activity\s+\d+|try\s+this|do\s+you\s+know\?)",
+    _re.IGNORECASE,
+)
+_RE_ANSWER      = _re.compile(
+    r"(?:^|\n)\s*(?:solution|ans(?:wer)?|sol\.)\s*[:\-]",
+    _re.IGNORECASE,
+)
+_RE_EXAMPLE     = _re.compile(
+    r"(?:^|\n)\s*example\s*\d*\s*[:\-]?",
+    _re.IGNORECASE,
+)
+_RE_DEFINITION  = _re.compile(
+    r"(?:is\s+defined\s+as|is\s+called|are\s+known\s+as|refers?\s+to|means?\s+that|is\s+a\s+(?:process|type|form|kind|method|substance|property|phenomenon))",
+    _re.IGNORECASE,
+)
+_RE_SUMMARY     = _re.compile(
+    r"(?:^|\n)\s*(?:what\s+you\s+have\s+learnt|key\s+(?:points?|takeaways?|terms?|concepts?)|summary|in\s+this\s+chapter|points?\s+to\s+remember|recap)",
+    _re.IGNORECASE,
+)
+_RE_EXERCISE    = _re.compile(
+    r"(?:^|\n)\s*(?:exercises?|problems?|assignments?|practice\s+questions?|additional\s+questions?|ncert\s+solutions?)\s*\n",
+    _re.IGNORECASE,
+)
+_RE_ACTIVITY    = _re.compile(
+    r"(?:^|\n)\s*(?:activity\s+\d+|lab\s+activity|experiment|practical|let\s+us\s+(?:do|try|find)|hands[\-\s]on)",
+    _re.IGNORECASE,
+)
+_RE_NOTE        = _re.compile(
+    r"(?:^|\n)\s*(?:note\s*:|remember\s*:|caution\s*:|important\s*:|did\s+you\s+know\??|fun\s+fact|think\s*:)",
+    _re.IGNORECASE,
+)
+_RE_FORMULA     = _re.compile(
+    r"(?:[A-Za-z]\s*=\s*[\w\(\)\+\-\*/\^]+|"       # algebra: v = u + at
+    r"[A-Z][a-z]?\d*(?:[A-Z][a-z]?\d*)+|"           # chemical: H2SO4, CO2, NaCl
+    r"\\frac|\\sqrt|∫|∑|∆|α|β|γ|λ|μ|σ|ω|"          # LaTeX / Greek
+    r"\d+\s*[×x]\s*\d+|"                             # multiplication
+    r"(?:mol|kg|kJ|kPa|atm|°C|°F|Hz|N\/m))",        # units
+    _re.IGNORECASE,
+)
+_RE_TABLE       = _re.compile(
+    r"(?:\|\s*[-:]+\s*\||\t[^\t]+\t[^\t]+\t|"       # markdown or tab table
+    r"(?:s\.?\s*no\.?|sl\.?\s*no\.?)\s*[\.\|:])",    # "S.No." header
+    _re.IGNORECASE,
+)
+_RE_FIGURE      = _re.compile(
+    r"(?:fig(?:ure)?\.?\s*\d+|diagram\s+\d+|see\s+fig(?:ure)?|as\s+shown\s+in|refer\s+to\s+fig(?:ure)?)",
+    _re.IGNORECASE,
+)
+_RE_INTRO       = _re.compile(
+    r"(?:^|\n)\s*(?:introduction|overview|in\s+this\s+chapter\s+we\s+(?:will|shall)|let\s+us\s+(?:begin|start|recall|revise))",
+    _re.IGNORECASE,
+)
+
+# ── Subject-domain classifiers ────────────────────────────────────────────────
+
+# Science sub-domains
+_RE_PHYSICS = _re.compile(
+    r"\b(?:force|motion|velocity|acceleration|momentum|energy|work|power|"
+    r"light|sound|wave|electricity|current|voltage|resistance|magnetic|"
+    r"gravitation|pressure|floatation|newton|ohm|joule|watt|reflection|"
+    r"refraction|lens|mirror|circuit|charge|potential|capacitor|induction|"
+    r"oscillation|frequency|amplitude|thermodynamics|heat|temperature)\b",
+    _re.IGNORECASE,
+)
+_RE_CHEMISTRY = _re.compile(
+    r"\b(?:element|compound|mixture|acid|base|salt|reaction|equation|"
+    r"oxidation|reduction|metal|non.?metal|ion|bond|covalent|ionic|"
+    r"periodic|carbon|organic|hydrocarbon|polymer|pH|mole|mol|atom|"
+    r"molecule|chemical|solution|concentration|electrolysis|catalyst|"
+    r"corrosion|combustion|hydrogen|oxygen|nitrogen|chlorine|sodium|"
+    r"calcium|iron|copper|zinc|sulphate|carbonate|oxide)\b",
+    _re.IGNORECASE,
+)
+_RE_BIOLOGY = _re.compile(
+    r"\b(?:cell|tissue|organ|organism|photosynthesis|respiration|"
+    r"reproduction|heredity|evolution|ecosystem|DNA|chromosome|gene|"
+    r"protein|enzyme|hormone|nerve|brain|heart|blood|lungs|kidney|"
+    r"digestion|nutrition|excretion|plant|animal|bacteria|virus|fungi|"
+    r"microorganism|classification|species|adaptation|food.?chain|"
+    r"biodiversity|pollination|germination|osmosis|diffusion)\b",
+    _re.IGNORECASE,
+)
+
+# Social Science sub-domains
+_RE_HISTORY = _re.compile(
+    r"\b(?:war|revolution|empire|century|colonial|independence|treaty|"
+    r"civilisation|civilization|dynasty|nationalist|movement|rebellion|"
+    r"partition|unification|imperialism|feudalism|renaissance|reformation|"
+    r"ancient|medieval|modern|historical|king|queen|ruler|battle|"
+    r"trade\s+route|colonialism|peasant|uprising|constitution\s+of\s+india|"
+    r"freedom\s+fighter|British\s+raj|mughal|maurya|gupta|delhi\s+sultanate)\b",
+    _re.IGNORECASE,
+)
+_RE_GEOGRAPHY = _re.compile(
+    r"\b(?:climate|rainfall|plateau|river|latitude|longitude|vegetation|"
+    r"soil|region|mineral|resource|mountain|plain|delta|glacier|erosion|"
+    r"deposition|atmosphere|pressure|wind|monsoon|drought|flood|map|"
+    r"topography|contour|scale|irrigation|agriculture|crop|forest|"
+    r"population|urbanization|migration|transport|communication|"
+    r"ocean|sea|coast|peninsula|island|watershed|tributary)\b",
+    _re.IGNORECASE,
+)
+_RE_CIVICS = _re.compile(
+    r"\b(?:constitution|parliament|rights|democracy|election|government|"
+    r"court|fundamental|directive|federalism|judiciary|legislature|"
+    r"executive|citizenship|sovereignty|secularism|republic|amendment|"
+    r"president|prime\s+minister|cabinet|lok\s+sabha|rajya\s+sabha|"
+    r"panchayat|municipality|political\s+party|suffrage|representation|"
+    r"equality|justice|liberty|fraternity|secularism)\b",
+    _re.IGNORECASE,
+)
+_RE_ECONOMICS = _re.compile(
+    r"\b(?:GDP|poverty|market|demand|supply|money|bank|sector|employment|"
+    r"consumer|price|inflation|income|wage|tax|subsidy|budget|trade|"
+    r"export|import|globalization|liberalization|privatization|"
+    r"development|growth|per\s+capita|inequality|rural|urban|"
+    r"industry|service|agriculture\s+sector|credit|loan|interest)\b",
+    _re.IGNORECASE,
+)
+
+# Question location — in-text (mid-chapter) vs end-of-chapter exercise
+_RE_INTEXT_Q = _re.compile(
+    r"(?:^|\n)\s*(?:think\s+and\s+(?:discuss|answer)|in.?text\s+question|"
+    r"do\s+you\s+know\??|try\s+this|can\s+you\s+(?:tell|think|find|answer)|"
+    r"discuss\s+with\s+your\s+(?:teacher|friends?|classmates?)|"
+    r"activity\s+\d+|checkpoint\s*\d*|quick\s+check|pause\s+and\s+think|"
+    r"बूझो तो जानें|क्या आप जानते हैं)",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+_RE_EXERCISE_Q = _re.compile(
+    r"(?:^|\n)\s*(?:exercises?\s*\n|exercise\s+\d|end[\s\-]of[\s\-]chapter|"
+    r"chapter\s+end|practice\s+questions?\s*\n|additional\s+(?:exercises?|questions?)|"
+    r"questions?\s+and\s+answers?\s*\n|ncert\s+(?:exercises?|solutions?)|"
+    r"textbook\s+(?:exercises?|questions?)|अभ्यास\s*\n|प्रश्न\s+अभ्यास)",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+# Requires diagram
+_RE_NEEDS_DIAGRAM = _re.compile(
+    r"\b(?:draw\s+(?:a|the|an)\s+(?:labelled?\s+)?(?:diagram|figure|sketch|graph|circuit|ray\s+diagram)|"
+    r"sketch\s+(?:a|the)|"
+    r"label\s+the\s+(?:diagram|figure|parts?)|"
+    r"show\s+(?:with\s+(?:a|the)\s+help\s+of\s+(?:a\s+)?diagram|diagrammatically)|"
+    r"illustrate\s+with\s+(?:a\s+)?diagram|"
+    r"construct\s+(?:a|the)\s+(?:triangle|angle|circle|quadrilateral)|"
+    r"plot\s+(?:a|the)\s+(?:graph|curve)|"
+    r"mark\s+(?:on\s+(?:a\s+)?(?:map|diagram|figure)))\b",
+    _re.IGNORECASE,
+)
+
+
+def _classify_science_domain(text: str) -> str:
+    """Return physics/chemistry/biology for science subject chunks."""
+    p = len(_RE_PHYSICS.findall(text))
+    c = len(_RE_CHEMISTRY.findall(text))
+    b = len(_RE_BIOLOGY.findall(text))
+    if p == 0 and c == 0 and b == 0:
+        return "general"
+    best = max(("physics", p), ("chemistry", c), ("biology", b), key=lambda x: x[1])
+    return best[0]
+
+
+def _classify_social_domain(text: str) -> str:
+    """Return history/geography/civics/economics for social science chunks."""
+    h = len(_RE_HISTORY.findall(text))
+    g = len(_RE_GEOGRAPHY.findall(text))
+    c = len(_RE_CIVICS.findall(text))
+    e = len(_RE_ECONOMICS.findall(text))
+    if h == 0 and g == 0 and c == 0 and e == 0:
+        return "general"
+    best = max(("history", h), ("geography", g), ("civics", c), ("economics", e), key=lambda x: x[1])
+    return best[0]
+
+
+def _classify_question_location(text: str) -> str:
+    """Distinguish intext questions from end-of-chapter exercises."""
+    if _RE_EXERCISE_Q.search(text):
+        return "exercise"
+    if _RE_INTEXT_Q.search(text):
+        return "intext"
+    return "body"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LANGUAGE SUBJECT ENRICHMENT
+# Applied only when subject in {english, hindi, kannada, tamil, sanskrit}.
+# Adds two extra metadata fields:
+#   lang_sub_type   – fine-grained content category (see values below)
+#   sentence_class  – "short_sentence"|"long_sentence"|"passage"|"word_list"
+#
+# lang_sub_type values:
+#   grammar_rule / grammar_example / grammar_exercise
+#   comprehension / comprehension_question
+#   short_answer_q / long_answer_q
+#   dialogue / letter_writing / essay_writing / story / poem
+#   summary_passage / vocabulary / translation
+#   note_making / report_writing / speech
+#   body  (fallback)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_LANGUAGE_SUBJECTS = {"english", "hindi", "kannada", "tamil", "sanskrit"}
+
+_RE_LANG_GRAMMAR_RULE = _re.compile(
+    r"(?:^|\n)\s*(?:"
+    r"(?:a|an)\s+(?:noun|verb|adjective|adverb|pronoun|preposition|conjunction|interjection|article|tense|clause|phrase|sentence)\s+is\b|"
+    r"rule\s*[:–\-]\s*|"
+    r"(?:present|past|future)\s+(?:simple|continuous|perfect|tense)|"
+    r"(?:active|passive)\s+voice|"
+    r"(?:direct|indirect)\s+(?:speech|narration)|"
+    r"(?:singular|plural)\s+(?:form|number)|"
+    r"(?:countable|uncountable)\s+noun|"
+    r"(?:transitive|intransitive)\s+verb|"
+    r"(?:coordinate|subordinate)\s+(?:clause|conjunction)|"
+    r"(?:कारक|संधि|समास|वचन|लिंग|काल|विभक्ति|क्रिया|विशेषण|सर्वनाम)|"
+    r"(?:ಸಂಧಿ|ಸಮಾಸ|ಕಾರಕ|ಕ್ರಿಯಾ|ವಿಭಕ್ತಿ|ನಾಮಪದ|ಕ್ರಿಯಾಪದ)|"
+    r"(?:சந்தி|வேர்ச்சொல்|வினையெச்சம்|பெயரெச்சம்|விகுதி)|"
+    r"(?:संधि|समास|कारक|विभक्ति|धातु|प्रत्यय|उपसर्ग)"
+    r")",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_GRAMMAR_EXAMPLE = _re.compile(
+    r"(?:^|\n)\s*(?:"
+    r"e\.?\s*g\.?\s*[:\.,]|"
+    r"for\s+example\s*[:\.,]|"
+    r"example\s*[:\-–]\s*[\"']?[A-Z]|"
+    r"(?:correct|incorrect)\s*[:\-–]|"
+    r"(?:उदाहरण|उदाहरण\s*:|उदा\.)|"
+    r"(?:ಉದಾಹರಣೆ|ಉದಾ\.)|"
+    r"(?:எடுத்துக்காட்டு|எ\.கா\.)|"
+    r"(?:उदाहरण|यथा)"
+    r")",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_GRAMMAR_EXERCISE = _re.compile(
+    r"(?:^|\n)\s*(?:"
+    r"fill\s+in\s+the\s+(?:blanks?|gaps?)|fill\s+up|"
+    r"rewrite\s+the\s+following|change\s+the\s+following|transform\s+the\s+following|"
+    r"match\s+the\s+(?:following|columns?|words?)|"
+    r"underline\s+the|circle\s+the|identify\s+the\s+(?:noun|verb|adjective|subject|object)|"
+    r"make\s+sentences?\s+using|correct\s+the\s+(?:errors?|mistakes?|sentences?)|"
+    r"use\s+the\s+following\s+words?\s+in\s+sentences?|"
+    r"insert\s+(?:articles?|prepositions?|conjunctions?)|"
+    r"do\s+as\s+directed|as\s+directed\s+in\s+brackets?|"
+    r"रिक्त\s+स्थान|सही\s+शब्द\s+भरिए|वाक्य\s+बनाइए|"
+    r"ಖಾಲಿ\s+ತುಂಬಿರಿ|ವಾಕ್ಯ\s+ರಚಿಸಿ|"
+    r"வெற்றிட\s+நிரப்புக|சொற்றொடர்\s+அமை"
+    r")",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_COMPREHENSION = _re.compile(
+    r"(?:^|\n)\s*(?:"
+    r"read\s+the\s+(?:following\s+)?(?:passage|extract|paragraph|text)\s+(?:carefully\s+)?and\s+(?:answer|do)|"
+    r"(?:unseen\s+)?(?:passage\s+for\s+)?comprehension|"
+    r"based\s+on\s+(?:the\s+)?(?:above\s+)?(?:passage|extract)|"
+    r"गद्यांश|पद्यांश|अपठित\s+गद्यांश|"
+    r"ಗद्यभाग|ಪद्यभाग|ಅಪಠಿತ\s+ಗद्यभाग|"
+    r"உரைநடை\s+பகுதி|கவிதை\s+பகுதி"
+    r")",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_COMP_QUESTION = _re.compile(
+    r"(?:"
+    r"answer\s+the\s+following\s+questions?\s+(?:based\s+on|from)\s+the\s+(?:above\s+)?(?:passage|extract)|"
+    r"(?:on\s+the\s+basis\s+of|according\s+to)\s+the\s+(?:above\s+)?(?:passage|extract)|"
+    r"निम्नलिखित\s+प्रश्नों\s+के\s+उत्तर\s+दीजिए|"
+    r"ಕೆಳಗಿನ\s+ಪ್ರಶ್ನೆಗಳಿಗೆ\s+ಉತ್ತರಿಸಿ"
+    r")",
+    _re.IGNORECASE,
+)
+
+_RE_LANG_SHORT_Q = _re.compile(
+    r"(?:^|\n)\s*(?:"
+    r"answer\s+(?:briefly|in\s+(?:one|two|a\s+few)\s+(?:words?|sentences?|lines?))|"
+    r"give\s+(?:a\s+)?short\s+(?:answer|note|description)|"
+    r"in\s+(?:not\s+more\s+than|about)\s+(?:\d+|twenty|thirty|fifty)\s+words?|"
+    r"name|define|state|mention\s+(?:the|any|two|three|four|five)|"
+    r"संक्षेप\s+में|एक\s+शब्द\s+में|एक\s+वाक्य\s+में|"
+    r"ಸಂಕ್ಷಿಪ್ತವಾಗಿ|ಒಂದು\s+ವಾಕ್ಯದಲ್ಲಿ"
+    r")",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_LONG_Q = _re.compile(
+    r"(?:^|\n)\s*(?:"
+    r"write\s+(?:a\s+)?(?:detailed|critical|long|elaborate)\s+(?:note|answer|essay|description|paragraph)|"
+    r"discuss\s+(?:in\s+detail|at\s+length|with\s+examples?)|"
+    r"describe\s+(?:in\s+detail|at\s+length|elaborately)|"
+    r"in\s+(?:not\s+less\s+than|about|at\s+least)\s+(?:\d{2,3}|hundred|two\s+hundred)\s+words?|"
+    r"write\s+an?\s+(?:essay|composition|paragraph|article|speech|report|letter)\s+(?:on|about|describing|discussing)|"
+    r"विस्तार\s+से\s+लिखिए|निबंध\s+लिखिए|"
+    r"ವಿವರವಾಗಿ\s+ಬರೆಯಿರಿ|ಪ್ರಬಂಧ\s+ಬರೆಯಿರಿ"
+    r")",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_DIALOGUE = _re.compile(
+    r"(?:"
+    r"(?:\b[A-Z][a-z]+\s*:\s+[A-Z\"].{10,}\n){2,}|"
+    r"conversation\s+between|dialogue\s+between|talking\s+to\s+each\s+other|"
+    r"वार्तालाप|संवाद|"
+    r"ಸಂಭಾಷಣೆ|"
+    r"உரையாடல்"
+    r")",
+    _re.IGNORECASE,
+)
+
+_RE_LANG_LETTER = _re.compile(
+    r"(?:"
+    r"(?:formal|informal|friendly)\s+letter|write\s+a\s+letter\s+to|"
+    r"dear\s+(?:sir|madam|friend),|"
+    r"yours?\s+(?:sincerely|faithfully|truly|affectionately|lovingly)|"
+    r"पत्र\s+लेखन|औपचारिक\s+पत्र|अनौपचारिक\s+पत्र|"
+    r"ಪತ್ರ\s+ಬರೆಯಿರಿ|ಔಪಚಾರಿಕ\s+ಪತ್ರ"
+    r")",
+    _re.IGNORECASE,
+)
+
+_RE_LANG_ESSAY = _re.compile(
+    r"(?:^|\n)\s*(?:"
+    r"write\s+an?\s+essay\s+(?:on|about)|essay\s+(?:on|about|writing)|"
+    r"composition\s+(?:on|about|writing)|"
+    r"निबंध\s+(?:लेखन|लिखिए|लिखो)|"
+    r"ಪ್ರಬಂಧ\s+ರಚಿಸಿ"
+    r")",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_STORY = _re.compile(
+    r"(?:"
+    r"once\s+(?:upon\s+a\s+time|there\s+was)|long\s+ago\s+there|"
+    r"story\s+(?:of|about)|write\s+a\s+story|storywriting|"
+    r"कहानी\s+लेखन|कहानी\s+लिखिए|एक\s+बार\s+की\s+बात|"
+    r"ಕಥೆ\s+ಬರೆಯಿರಿ|ಒಮ್ಮೆ\s+ಒಬ್ಬ"
+    r")",
+    _re.IGNORECASE,
+)
+
+_RE_LANG_POEM = _re.compile(
+    r"(?:poem|poetry|rhyme|stanza|verse|couplet|"
+    r"कविता|पद्य|दोहा|चौपाई|श्लोक|"
+    r"ಕವಿತೆ|ಪದ್ಯ|"
+    r"கவிதை|பாடல்|"
+    r"श्लोक|पद्य)",
+    _re.IGNORECASE,
+)
+
+_RE_LANG_VOCABULARY = _re.compile(
+    r"(?:^|\n)\s*(?:"
+    r"word\s+meanings?|meanings?\s+of\s+(?:the\s+)?(?:following\s+)?words?|"
+    r"synonyms?\s+(?:of|for)|antonyms?\s+(?:of|for)|homophones?|homonyms?|"
+    r"glossary|vocabulary|word\s+bank|new\s+words?|difficult\s+words?|"
+    r"match\s+the\s+words?\s+with\s+their\s+meanings?|"
+    r"शब्दार्थ|पर्यायवाची|विलोम\s+शब्द|मुहावरे|लोकोक्तियाँ|"
+    r"ಶಬ್ದಾರ್ಥ|ಸಮಾನಾರ್ಥಕ|ವಿರುದ್ಧಾರ್ಥಕ|"
+    r"சொற்பொருள்|எதிர்ச்சொல்|ஒத்த\s+சொல்"
+    r")",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_TRANSLATION = _re.compile(
+    r"(?:^|\n)\s*(?:"
+    r"translate\s+(?:the\s+following|into|from)|translation\s+(?:of|into)|"
+    r"अनुवाद\s+(?:कीजिए|करो|लिखिए)|"
+    r"ಅನುವಾದ\s+ಮಾಡಿ|ಭಾಷಾಂತರ\s+ಮಾಡಿ|"
+    r"மொழிபெயர்|மொழிபெயர்ப்பு"
+    r")",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_NOTE_MAKING = _re.compile(
+    r"(?:^|\n)\s*(?:note[\s-]?making|note[\s-]?taking|make\s+notes?\s+(?:of|on|from)|"
+    r"summarize\s+the\s+(?:following\s+)?(?:passage|text)|summary\s+writing)",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_REPORT = _re.compile(
+    r"(?:^|\n)\s*(?:report\s+writing|write\s+a\s+(?:news\s+)?report|newspaper\s+report)",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+_RE_LANG_SPEECH = _re.compile(
+    r"(?:^|\n)\s*(?:speech\s+(?:writing|on)|write\s+a\s+speech|debate\s+(?:on|about)|"
+    r"speaking\s+(?:activity|practice)|speech\s+by)",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+
+def _classify_lang_sub_type(text: str) -> str:
+    """Fine-grained language content type. Priority: structural > content."""
+    t = text.strip()
+    if _RE_LANG_GRAMMAR_EXERCISE.search(t): return "grammar_exercise"
+    if _RE_LANG_COMP_QUESTION.search(t):    return "comprehension_question"
+    if _RE_LANG_LONG_Q.search(t):           return "long_answer_q"
+    if _RE_LANG_SHORT_Q.search(t):          return "short_answer_q"
+    if _RE_LANG_TRANSLATION.search(t):      return "translation"
+    if _RE_LANG_NOTE_MAKING.search(t):      return "note_making"
+    if _RE_LANG_REPORT.search(t):           return "report_writing"
+    if _RE_LANG_SPEECH.search(t):           return "speech"
+    if _RE_LANG_ESSAY.search(t):            return "essay_writing"
+    if _RE_LANG_LETTER.search(t):           return "letter_writing"
+    if _RE_LANG_COMPREHENSION.search(t):    return "comprehension"
+    if _RE_LANG_GRAMMAR_RULE.search(t):     return "grammar_rule"
+    if _RE_LANG_GRAMMAR_EXAMPLE.search(t):  return "grammar_example"
+    if _RE_LANG_VOCABULARY.search(t):       return "vocabulary"
+    if _RE_LANG_DIALOGUE.search(t):         return "dialogue"
+    if _RE_LANG_POEM.search(t):             return "poem"
+    if _RE_LANG_STORY.search(t):            return "story"
+    return "body"
+
+
+def _classify_sentence_length(text: str) -> str:
+    """
+    Classify the text block by sentence/line length characteristics.
+    word_list  – mostly single words or very short phrases (vocab lists)
+    short_sentence – avg sentence < 12 words (drills, gap-fill)
+    long_sentence  – avg 12-25 words (explanatory sentences)
+    passage        – 200+ total words (reading comprehension, story, essay)
+    """
+    core  = _re.sub(r"^[^\n]+\n", "", text.strip(), count=1)
+    lines = [l.strip() for l in core.splitlines() if l.strip()]
+    if not lines:
+        return "short_sentence"
+    avg   = sum(len(l.split()) for l in lines) / len(lines)
+    total = sum(len(l.split()) for l in lines)
+    if avg < 4 and total < 60:   return "word_list"
+    if avg < 12 and total < 120: return "short_sentence"
+    if total >= 200:              return "passage"
+    return "long_sentence"
+
+
+# Common English stop-words for keyword extraction
+_STOPWORDS = {
+    "the","a","an","is","are","was","were","be","been","being","have","has",
+    "had","do","does","did","will","would","shall","should","may","might",
+    "must","can","could","of","in","on","at","to","for","with","by","from",
+    "that","this","these","those","it","its","we","our","us","you","your",
+    "they","their","them","he","his","she","her","and","or","but","if","as",
+    "not","no","so","also","both","each","some","any","all","more","most",
+    "such","than","then","when","where","which","who","how","what","why",
+    "one","two","three","into","about","after","before","between","through",
+}
+
+# ── Core classifiers ──────────────────────────────────────────────────────────
+
+def _classify_content_type(text: str) -> str:
+    """
+    Return a single content_type label for a chunk based on signal patterns.
+    Priority order matters — more specific signals win over general ones.
+    """
+    t = text.strip()
+
+    if _RE_EXERCISE.search(t):   return "exercise"
+    if _RE_SUMMARY.search(t):    return "summary"
+    if _RE_ACTIVITY.search(t):   return "activity"
+    if _RE_NOTE.search(t):       return "note"
+    if _RE_ANSWER.search(t):     return "answer"
+    if _RE_EXAMPLE.search(t):    return "example"
+    if _RE_QUESTION.search(t):   return "question"
+    if _RE_THINK_Q.search(t):    return "question"
+    if _RE_DEFINITION.search(t): return "definition"
+    if _RE_INTRO.search(t):      return "introduction"
+    if _RE_TABLE.search(t):      return "table"
+    if _RE_FORMULA.search(t):    return "formula"
+    if _RE_FIGURE.search(t):     return "figure_ref"
+
+    # Heuristic: short chunks (< 60 words) with a direct declarative sentence → fact
+    words = t.split()
+    if len(words) < 60 and _re.search(r"\b(?:is|are|was|were|has|have)\b", t):
+        return "fact"
+
+    return "body"
+
+
+def _estimate_bloom_level(text: str, content_type: str) -> str:
+    """
+    Estimate which Bloom's taxonomy level this chunk supports answering.
+    Used by the worksheet generator to fetch difficulty-appropriate content.
+    """
+    t = text.lower()
+
+    # Definite higher-order signals
+    if _re.search(r"\b(?:evaluate|justify|critique|design|create|hypothesi[sz]e|predict|argue|assess|compare\s+and\s+contrast|critically)\b", t):
+        return "evaluate"
+    if _re.search(r"\b(?:analy[sz]e|analyse|differentiate|classify|distinguish|examine|infer|investigate|why\s+does|why\s+is|what\s+would\s+happen)\b", t):
+        return "analyse"
+    if _re.search(r"\b(?:apply|calculate|solve|use|demonstrate|experiment|construct|show\s+that|find\s+the\s+value|derive)\b", t):
+        return "apply"
+    if _re.search(r"\b(?:explain|describe|summarize|interpret|discuss|illustrate|paraphrase|give\s+reason)\b", t):
+        return "understand"
+
+    # Content-type shortcuts
+    if content_type in ("summary", "definition", "fact", "introduction"):
+        return "remember"
+    if content_type in ("exercise", "question"):
+        return "apply"
+    if content_type == "answer":
+        return "understand"
+    if content_type in ("example", "formula"):
+        return "apply"
+
+    return "remember"
+
+
+def _extract_keywords(text: str, n: int = 5) -> str:
+    """
+    Return top-N content words as a comma-separated string.
+    Used as a lightweight keyword hint in metadata.
+    """
+    words = _re.findall(r"\b[a-z]{4,}\b", text.lower())
+    freq  = _Counter(w for w in words if w not in _STOPWORDS)
+    return ", ".join(w for w, _ in freq.most_common(n))
+
+
+def _parse_chapter(text: str) -> tuple[str, int]:
+    """
+    Find the best chapter heading in a page/chunk and return
+    (chapter_label, chapter_number). Returns ("", 0) if not found.
+    """
+    for m in _RE_CHAPTER.finditer(text):
+        # Group 1/2: "Chapter N – Title"
+        if m.group(1):
+            num   = int(m.group(1))
+            title = (m.group(2) or "").strip()
+            label = f"Chapter {num}" + (f" – {title}" if title else "")
+            return label[:150], num
+        # Group 3/4: "N. Title"
+        if m.group(3):
+            num   = int(m.group(3))
+            title = (m.group(4) or "").strip()
+            label = f"Chapter {num} – {title}"
+            return label[:150], num
+    return "", 0
+
+
+def _parse_section(text: str) -> str:
+    """Return the best section heading (e.g. '1.2 Types of Reactions')."""
+    m = _RE_SECTION.search(text)
+    if m:
+        return m.group(0).strip()[:120]
+    # Fallback: ALL-CAPS heading that isn't the chapter title
+    m2 = _re.search(r"^([A-Z][A-Z\s]{4,60})$", text, _re.MULTILINE)
+    if m2:
+        return m2.group(0).strip()[:120]
+    return ""
+
+
+def _parse_subsection(text: str) -> str:
+    """Return subsection heading (e.g. '1.2.1 Combination Reactions')."""
+    m = _RE_SUBSECTION.search(text)
+    return m.group(0).strip()[:120] if m else ""
+
+
+# ── Main enrichment pipeline ──────────────────────────────────────────────────
+
+def enrich_chunks(chunks: list) -> list:
+    """
+    Walk through all chunks in document order and attach rich metadata.
+
+    State carried forward (sticky across chunk boundaries):
+      last_chapter, last_chapter_num, last_section, last_subsection
+    This ensures chunks that fall mid-chapter still know their location.
+    """
+    last_chapter     = ""
+    last_chapter_num = 0
+    last_section     = ""
+    last_subsection  = ""
+
+    for chunk in chunks:
+        text = chunk.page_content
+
+        # ── Structural location ───────────────────────────────────────────────
+        ch, ch_num = _parse_chapter(text)
+        sec        = _parse_section(text)
+        subsec     = _parse_subsection(text)
+
+        if ch:
+            last_chapter     = ch
+            last_chapter_num = ch_num
+            last_section     = ""      # new chapter resets section
+            last_subsection  = ""
+        if sec and sec.lower() != last_chapter.lower():
+            last_section    = sec
+            last_subsection = ""       # new section resets subsection
+        if subsec:
+            last_subsection = subsec
+
+        # ── Semantic classification ───────────────────────────────────────────
+        content_type = _classify_content_type(text)
+        bloom_level  = _estimate_bloom_level(text, content_type)
+        keywords     = _extract_keywords(text)
+
+        # ── Boolean signals ───────────────────────────────────────────────────
+        has_formula    = bool(_RE_FORMULA.search(text))
+        has_table      = bool(_RE_TABLE.search(text))
+        has_figure_ref = bool(_RE_FIGURE.search(text))
+        word_count     = len(text.split())
+
+        # ── Language subject extras ───────────────────────────────────────────────
+        subject        = chunk.metadata.get("subject", "")
+        is_lang        = subject in _LANGUAGE_SUBJECTS
+        lang_sub_type  = _classify_lang_sub_type(text) if is_lang else ""
+        sentence_class = _classify_sentence_length(text) if is_lang else ""
+
+        # ── Subject domain (science / social science sub-classification) ──────
+        science_domain = _classify_science_domain(text) if subject == "science" else ""
+        social_domain  = _classify_social_domain(text)  if subject == "socialscience" else ""
+
+        # ── Question location and diagram flag ────────────────────────────────
+        question_location = _classify_question_location(text)
+        requires_diagram  = bool(_RE_NEEDS_DIAGRAM.search(text))
+
+        # ── Clean chapter title (without "Chapter N –" prefix) ───────────────
+        chapter_title = ""
+        if last_chapter:
+            m = _re.match(r"^chapter\s+\d+\s*[–\-:]\s*(.+)$", last_chapter, _re.IGNORECASE)
+            chapter_title = m.group(1).strip() if m else last_chapter
+
+        # ── Write metadata ────────────────────────────────────────────────────
+        chunk.metadata.update({
+            "chapter":           last_chapter,
+            "chapter_num":       last_chapter_num,
+            "chapter_title":     chapter_title,
+            "section":           last_section,
+            "subsection":        last_subsection,
+            "content_type":      content_type,
+            "bloom_level":       bloom_level,
+            "has_formula":       has_formula,
+            "has_table":         has_table,
+            "has_figure_ref":    has_figure_ref,
+            "requires_diagram":  requires_diagram,
+            "keyword_hints":     keywords,
+            "word_count":        word_count,
+            # Subject domain sub-classification
+            "science_domain":    science_domain,
+            "social_domain":     social_domain,
+            # Question location
+            "question_location": question_location,
+            # Language-subject fields (empty string for non-language subjects)
+            "lang_sub_type":     lang_sub_type,
+            "sentence_class":    sentence_class,
+        })
+
+        # ── Enrich the embedded text with structural context ──────────────────
+        ctx_parts = []
+        if last_chapter:       ctx_parts.append(last_chapter)
+        if last_section:       ctx_parts.append(last_section)
+        if last_subsection:    ctx_parts.append(last_subsection)
+        ctx_parts.append(f"[{content_type}]")
+        if science_domain:     ctx_parts.append(f"[{science_domain}]")
+        if social_domain:      ctx_parts.append(f"[{social_domain}]")
+        if question_location != "body": ctx_parts.append(f"[{question_location}]")
+        if lang_sub_type:      ctx_parts.append(f"[{lang_sub_type}]")
+        if sentence_class:     ctx_parts.append(f"[{sentence_class}]")
+
+        prefix = " | ".join(ctx_parts) + "\n"
+        chunk.page_content = prefix + text
+
+    return chunks
+
+
 # ── PDF loader ────────────────────────────────────────────────────────────────
 def load_pdf(pdf_info: dict) -> list:
     """Load PDF — PyMuPDF with higher decompression limit, fallback to PyPDF."""
@@ -483,9 +1213,65 @@ def ingest_pdf_list(
             continue
 
         chunks = splitter.split_documents(pages)
-        console.print(
-            f"   [dim]{len(pages)} pages → {len(chunks)} chunks[/dim]"
+        chunks = enrich_chunks(chunks)
+
+        # ── Log metadata breakdown ────────────────────────────────────────
+        from collections import Counter
+        type_counts = Counter(c.metadata.get("content_type","?") for c in chunks)
+        bloom_counts = Counter(c.metadata.get("bloom_level","?") for c in chunks)
+        chapters_found = sorted({
+            c.metadata.get("chapter","") for c in chunks if c.metadata.get("chapter")
+        })
+
+        console.print(f"   [dim]{len(pages)} pages → {len(chunks)} chunks[/dim]")
+
+        if chapters_found:
+            console.print(
+                "   [green]Chapters:[/green] "
+                + ", ".join(f"[cyan]{ch[:55]}[/cyan]" for ch in chapters_found[:6])
+                + (f" +{len(chapters_found)-6} more" if len(chapters_found) > 6 else "")
+            )
+
+        type_str = "  ".join(
+            f"[yellow]{k}[/yellow]:[white]{v}[/white]"
+            for k, v in sorted(type_counts.items(), key=lambda x: -x[1])
         )
+        console.print(f"   [dim]Content types →[/dim] {type_str}")
+
+        bloom_str = "  ".join(
+            f"[magenta]{k}[/magenta]:[white]{v}[/white]"
+            for k, v in sorted(bloom_counts.items(), key=lambda x: -x[1])
+        )
+        console.print(f"   [dim]Bloom levels  →[/dim] {bloom_str}")
+
+        # Science domain breakdown
+        if pdf_info["subject"] == "science":
+            dom_counts = Counter(c.metadata.get("science_domain","?") for c in chunks)
+            dom_str = "  ".join(f"[blue]{k}[/blue]:[white]{v}[/white]" for k,v in sorted(dom_counts.items(), key=lambda x: -x[1]))
+            console.print(f"   [dim]Science domains →[/dim] {dom_str}")
+
+        # Social science domain breakdown
+        if pdf_info["subject"] == "socialscience":
+            dom_counts = Counter(c.metadata.get("social_domain","?") for c in chunks)
+            dom_str = "  ".join(f"[blue]{k}[/blue]:[white]{v}[/white]" for k,v in sorted(dom_counts.items(), key=lambda x: -x[1]))
+            console.print(f"   [dim]Social domains  →[/dim] {dom_str}")
+
+        # Question location breakdown
+        loc_counts = Counter(c.metadata.get("question_location","?") for c in chunks)
+        exercise_n = loc_counts.get("exercise", 0)
+        intext_n   = loc_counts.get("intext", 0)
+        if exercise_n or intext_n:
+            console.print(f"   [dim]Questions: [green]{exercise_n} exercise[/green]  [yellow]{intext_n} in-text[/yellow][/dim]")
+
+        # If it's a language subject, show lang_sub_type breakdown too
+        if pdf_info["subject"] in {"english", "hindi", "kannada", "tamil", "sanskrit"}:
+            lang_counts = Counter(c.metadata.get("lang_sub_type","?") for c in chunks if c.metadata.get("lang_sub_type"))
+            if lang_counts:
+                lang_str = "  ".join(
+                    f"[cyan]{k}[/cyan]:[white]{v}[/white]"
+                    for k, v in sorted(lang_counts.items(), key=lambda x: -x[1])
+                )
+                console.print(f"   [dim]Lang sub-types →[/dim] {lang_str}")
 
         # If force re-ingest, remove old vectors for this file from tracker
         if force and pdf_info["key"] in tracker:
@@ -574,7 +1360,7 @@ def ingest_documents(force: bool = False, adhoc: bool = False):
     """
     data_dir      = os.getenv("DATA_DIR", "./data")
     chroma_dir    = os.getenv("CHROMA_DIR", "./chroma_db")
-    chunk_size    = int(os.getenv("CHUNK_SIZE", 600))
+    chunk_size    = int(os.getenv("CHUNK_SIZE", 1000))
     chunk_overlap = int(os.getenv("CHUNK_OVERLAP", 80))
     batch_size    = int(os.getenv("EMBED_BATCH_SIZE", 10))
 

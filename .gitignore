@@ -4,3 +4,4 @@ files*
 venv*
 .env
 data/**
+image_store/**
