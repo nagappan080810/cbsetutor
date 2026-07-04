@@ -28,6 +28,19 @@ SUPPORTED_SUBJECTS = [
 
 TRACKER_FILE = "ingest_tracker.json"
 
+# ── Vectorstore backend ────────────────────────────────────────────────────────
+# VECTORSTORE_PROVIDER selects the search index without touching code.
+# Options: "chroma" (default) | "faiss" (Facebook AI Similarity Search).
+# Both are free/open-source and run entirely locally. Pick FAISS for faster
+# raw similarity search on large corpora; stick with Chroma for its
+# built-in rich metadata filtering (used heavily by retriever.py's
+# class/subject/difficulty filters).
+
+def get_vectorstore_dir(base_dir: str, provider: str) -> str:
+    if provider == "faiss":
+        return os.getenv("FAISS_DIR", base_dir + "_faiss")
+    return base_dir
+
 # ── Embedding provider ────────────────────────────────────────────────────────
 
 def get_embeddings():
@@ -1109,8 +1122,9 @@ def load_pdf(pdf_info: dict) -> list:
 def embed_in_batches(
     all_chunks: list,
     embeddings,
-    chroma_dir: str,
+    vector_dir: str,
     batch_size: int,
+    provider: str = "chroma",
     existing_store=None
 ) -> tuple:
     vectorstore   = existing_store
@@ -1146,13 +1160,29 @@ def embed_in_batches(
             for attempt in range(3):
                 try:
                     if vectorstore is None:
-                        vectorstore = Chroma.from_documents(
-                            documents=batch,
-                            embedding=embeddings,
-                            persist_directory=chroma_dir
-                        )
+                        if provider == "faiss":
+                            from langchain_community.vectorstores import FAISS
+                            vectorstore = FAISS.from_documents(
+                                documents=batch,
+                                embedding=embeddings
+                            )
+                        else:
+                            vectorstore = Chroma.from_documents(
+                                documents=batch,
+                                embedding=embeddings,
+                                persist_directory=vector_dir
+                            )
                     else:
                         vectorstore.add_documents(batch)
+
+                    # FAISS has no persist_directory auto-write like Chroma --
+                    # it must be explicitly saved to disk. Doing this every
+                    # batch (not just at the very end) means a crash mid-run
+                    # doesn't lose already-embedded batches, matching the
+                    # per-PDF tracker durability already used elsewhere here.
+                    if provider == "faiss":
+                        vectorstore.save_local(vector_dir)
+
                     success = True
                     break
                 except Exception as e:
@@ -1181,12 +1211,13 @@ def ingest_pdf_list(
     pdf_list: list,
     embeddings,
     vectorstore,
-    chroma_dir: str,
+    vector_dir: str,
     chunk_size: int,
     chunk_overlap: int,
     batch_size: int,
     tracker: dict,
-    force: bool = False
+    force: bool = False,
+    provider: str = "chroma"
 ) -> tuple:
     """
     Ingest a list of PDFs one by one.
@@ -1282,8 +1313,8 @@ def ingest_pdf_list(
             save_tracker(tracker)
 
         vectorstore, failed = embed_in_batches(
-            chunks, embeddings, chroma_dir, batch_size,
-            existing_store=vectorstore
+            chunks, embeddings, vector_dir, batch_size,
+            provider=provider, existing_store=vectorstore
         )
         total_failed += len(failed)
 
@@ -1364,17 +1395,29 @@ def ingest_documents(force: bool = False, adhoc: bool = False):
     chunk_overlap = int(os.getenv("CHUNK_OVERLAP", 80))
     batch_size    = int(os.getenv("EMBED_BATCH_SIZE", 10))
 
+    # VECTORSTORE_PROVIDER: "chroma" (default) | "faiss". Both are FOSS and
+    # local -- this only changes which search engine builds the index, not
+    # any cost trade-off. See get_vectorstore_dir() above for details.
+    vs_provider = os.getenv("VECTORSTORE_PROVIDER", "chroma").lower()
+    vector_dir  = get_vectorstore_dir(chroma_dir, vs_provider)
+
     tracker    = load_tracker()
     embeddings = get_embeddings()
 
     # Load existing vectorstore if it exists
     vectorstore = None
-    if os.path.exists(chroma_dir) and os.listdir(chroma_dir):
-        console.print("[dim]Existing vector store found — will add to it.[/dim]")
-        vectorstore = Chroma(
-            persist_directory=chroma_dir,
-            embedding_function=embeddings
-        )
+    if os.path.exists(vector_dir) and os.listdir(vector_dir):
+        console.print(f"[dim]Existing {vs_provider} vector store found — will add to it.[/dim]")
+        if vs_provider == "faiss":
+            from langchain_community.vectorstores import FAISS
+            vectorstore = FAISS.load_local(
+                vector_dir, embeddings, allow_dangerous_deserialization=True
+            )
+        else:
+            vectorstore = Chroma(
+                persist_directory=vector_dir,
+                embedding_function=embeddings
+            )
 
     # ── Ad-hoc mode: interactive file picker ─────────────────
     if adhoc:
@@ -1453,8 +1496,8 @@ def ingest_documents(force: bool = False, adhoc: bool = False):
 
         vectorstore, total_failed = ingest_pdf_list(
             files_to_process, embeddings, vectorstore,
-            chroma_dir, chunk_size, chunk_overlap,
-            batch_size, tracker, force=True
+            vector_dir, chunk_size, chunk_overlap,
+            batch_size, tracker, force=True, provider=vs_provider
         )
     
     # ── Normal / force mode: ingest all ──────────────────────
@@ -1475,7 +1518,7 @@ def ingest_documents(force: bool = False, adhoc: bool = False):
             console.print(
                 "[yellow]⚠ Force mode — re-ingesting everything.[/yellow]"
             )
-            shutil.rmtree(chroma_dir, ignore_errors=True)
+            shutil.rmtree(vector_dir, ignore_errors=True)
             tracker     = {}
             vectorstore = None
             new_files   = all_files
@@ -1521,13 +1564,16 @@ def ingest_documents(force: bool = False, adhoc: bool = False):
 
         vectorstore, total_failed = ingest_pdf_list(
             new_files, embeddings, vectorstore,
-            chroma_dir, chunk_size, chunk_overlap,
-            batch_size, tracker, force=False
+            vector_dir, chunk_size, chunk_overlap,
+            batch_size, tracker, force=False, provider=vs_provider
         )
 
     # ── Final persist ─────────────────────────────────────────
     if vectorstore:
-        vectorstore.persist()
+        if vs_provider == "faiss":
+            vectorstore.save_local(vector_dir)  # already saved per-batch too, belt & suspenders
+        else:
+            vectorstore.persist()
         console.print(f"\n[bold green]✅ Done![/bold green]")
         if total_failed:
             console.print(

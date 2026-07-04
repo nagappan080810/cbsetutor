@@ -11,11 +11,16 @@ RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 class CBSERetriever:
     def __init__(self):
-        self.embeddings  = self._get_embeddings()
-        self.vectorstore = Chroma(
-            persist_directory=os.getenv("CHROMA_DIR", "./chroma_db"),
-            embedding_function=self.embeddings
-        )
+        self.embeddings         = self._get_embeddings()
+        # VECTORSTORE_PROVIDER selects the search backend without touching
+        # code. Options: "chroma" (default) | "faiss" (Facebook AI
+        # Similarity Search). Both are free/open-source and run entirely
+        # locally -- no API cost either way. FAISS trades Chroma's built-in
+        # metadata filtering for raw search speed, so pick it when the
+        # corpus is large and you want faster similarity search; stick
+        # with Chroma if you rely heavily on rich metadata filtering.
+        self.vectorstore_provider = os.getenv("VECTORSTORE_PROVIDER", "chroma").lower()
+        self.vectorstore          = self._load_vectorstore()
         console.print("[dim]Loading re-ranker model...[/dim]")
         self.reranker       = CrossEncoder(RERANKER_MODEL)
         self.top_k_retrieve = int(os.getenv("TOP_K_RETRIEVE", 20))
@@ -59,6 +64,71 @@ class CBSERetriever:
                 f"Unknown EMBED_PROVIDER: {provider}. "
                 "Use 'ollama', 'google', or 'huggingface' in .env"
             )
+
+    def _load_vectorstore(self):
+        """
+        Load the persisted vector index for whichever backend was used at
+        ingestion time. Both Chroma and FAISS are FOSS and run locally --
+        no API keys, no per-query cost -- so this is purely a search-engine
+        choice, not a cost trade-off.
+        """
+        if self.vectorstore_provider == "faiss":
+            from langchain_community.vectorstores import FAISS
+            faiss_dir = os.getenv(
+                "FAISS_DIR",
+                os.getenv("CHROMA_DIR", "./chroma_db") + "_faiss"
+            )
+            if not (os.path.exists(faiss_dir) and os.listdir(faiss_dir)):
+                raise FileNotFoundError(
+                    f"No FAISS index found at '{faiss_dir}'. Run "
+                    f"`python ingest.py` with VECTORSTORE_PROVIDER=faiss "
+                    f"set first, or switch VECTORSTORE_PROVIDER back to "
+                    f"'chroma' if that's what you ingested with."
+                )
+            console.print(f"[dim]Loading FAISS index from {faiss_dir}[/dim]")
+            # allow_dangerous_deserialization=True is required by langchain
+            # because the index is unpickled from disk. Safe here since we
+            # only ever load files this same pipeline wrote.
+            return FAISS.load_local(
+                faiss_dir,
+                self.embeddings,
+                allow_dangerous_deserialization=True
+            )
+        else:
+            console.print("[dim]Loading Chroma index...[/dim]")
+            return Chroma(
+                persist_directory=os.getenv("CHROMA_DIR", "./chroma_db"),
+                embedding_function=self.embeddings
+            )
+
+    def _build_where_filter(self, class_filter: str, subject_filter: str):
+        """
+        Build a metadata filter in whichever dialect the active backend
+        expects. Chroma uses MongoDB-style operators ($and/$eq); FAISS's
+        similarity_search takes a plain dict of exact-match key/value
+        pairs (ANDed together), so passing Chroma-style operators to FAISS
+        would silently match nothing.
+        """
+        if self.vectorstore_provider == "faiss":
+            f = {}
+            if class_filter:
+                f["class"] = class_filter
+            if subject_filter:
+                f["subject"] = subject_filter
+            return f
+        else:
+            if class_filter and subject_filter:
+                return {
+                    "$and": [
+                        {"class":   {"$eq": class_filter}},
+                        {"subject": {"$eq": subject_filter}}
+                    ]
+                }
+            elif class_filter:
+                return {"class": {"$eq": class_filter}}
+            elif subject_filter:
+                return {"subject": {"$eq": subject_filter}}
+            return {}
 
     @staticmethod
     def _score_to_confidence(scores: list) -> list:
@@ -114,35 +184,25 @@ class CBSERetriever:
         question_location) — without this correction, retrieval silently
         skips exactly the harder / activity-based content.
         """
-        # Build metadata filter
-        where_filter = {}
-        if class_filter and subject_filter:
-            where_filter = {
-                "$and": [
-                    {"class":   {"$eq": class_filter}},
-                    {"subject": {"$eq": subject_filter}}
-                ]
-            }
-        elif class_filter:
-            where_filter = {"class": {"$eq": class_filter}}
-        elif subject_filter:
-            where_filter = {"subject": {"$eq": subject_filter}}
+        # Build metadata filter in whichever dialect the active backend expects
+        where_filter = self._build_where_filter(class_filter, subject_filter)
 
         # Step 1 — vector search (retrieve MORE candidates than before so
         # low-similarity-but-high-value content like Figure It Out boxes
         # still has a chance to be pulled in before re-ranking)
         try:
+            search_kwargs = {"k": self.top_k_retrieve}
             if where_filter:
-                candidates = self.vectorstore.similarity_search(
-                    question,
-                    k=self.top_k_retrieve,
-                    filter=where_filter
-                )
-            else:
-                candidates = self.vectorstore.similarity_search(
-                    question,
-                    k=self.top_k_retrieve
-                )
+                search_kwargs["filter"] = where_filter
+                if self.vectorstore_provider == "faiss":
+                    # FAISS applies the filter AFTER pulling fetch_k nearest
+                    # neighbours, not before -- so fetch_k must be well
+                    # above top_k_retrieve or a filtered query can come
+                    # back with too few (or zero) results even when
+                    # matching docs exist in the index.
+                    search_kwargs["fetch_k"] = self.top_k_retrieve * 4
+
+            candidates = self.vectorstore.similarity_search(question, **search_kwargs)
         except Exception as e:
             console.print(
                 f"[yellow]Filter search failed ({e}), trying without filter...[/yellow]"
