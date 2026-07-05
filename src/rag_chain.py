@@ -1,10 +1,14 @@
 import os
+import re
+import time
+import asyncio
+import requests
 from dotenv import load_dotenv
 from langchain_core.prompts import PromptTemplate
 from langchain_deepseek import ChatDeepSeek
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_groq import ChatGroq
-from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage, AIMessage, AIMessageChunk
 from langchain_core.tools import tool
 from src.retriever import CBSERetriever
 from src.formatter import format_answer
@@ -13,6 +17,173 @@ import sympy
 
 load_dotenv()
 console = Console()
+
+
+class CharitraCloudChat:
+    """
+    Thin client for the already-deployed Charitra HF Space endpoint
+    (https://lijoraju-charitra-backend.hf.space/query) — see
+    customizedmodel.txt. Chosen deliberately over pulling the GGUF model
+    locally: this hits the model in the cloud, nothing to download.
+
+    IMPORTANT — what this bypasses (by design, per user's choice):
+      - This endpoint does ITS OWN retrieval internally, over its OWN FAISS
+        index built only over NCERT Class 10 Social Science. It does not
+        accept a context override.
+      - Using it as LLM_PROVIDER means this app's own Chroma retriever,
+        class/subject filters, re-ranking, and metadata boosts are NOT used
+        to build the answer — we just forward the raw question and return
+        whatever this endpoint says.
+      - Answers will only ever reflect NCERT Class 10 Social Science
+        content, regardless of which class/subject the user selects in
+        this app's UI.
+      - It's single-shot, not token-streamed. astream() below fakes
+        streaming by yielding the whole answer as one chunk, so it stays
+        compatible with astream_with_tools() without changing call sites.
+      - The `calculate` tool is never invoked for this provider — the
+        endpoint has no concept of tool calls, and we don't bind any tools
+        to this class.
+      - It CANNOT produce the structured multi-question JSON a worksheet
+        needs (it returns a single free-text answer to a factual
+        question). Worksheet generation is explicitly blocked for this
+        provider in api.py rather than being attempted and failing.
+    """
+    def __init__(self, base_url: str = None, top_k: int = 3, timeout: int = 60):
+        self.base_url = (base_url or os.getenv(
+            "CHARITRA_API_URL", "https://lijoraju-charitra-backend.hf.space"
+        )).rstrip("/")
+        self.top_k   = top_k
+        self.timeout = timeout
+
+    @staticmethod
+    def _extract_question(messages) -> str:
+        """
+        Our own prompt templates wrap the user's actual question inside a
+        large instructions+context blob ending in
+        'QUESTION: <question>\\n\\nANSWER:'. This endpoint expects a plain
+        question, so pull just that part back out. Falls back to the raw
+        message content if the marker isn't found (e.g. called directly).
+        """
+        raw = ""
+        for m in reversed(messages):
+            content = getattr(m, "content", None)
+            if content is None and isinstance(m, dict):
+                content = m.get("content")
+            if content:
+                raw = content
+                break
+        match = re.search(r"QUESTION:\s*(.*?)\s*ANSWER:", raw, re.DOTALL | re.IGNORECASE)
+        return match.group(1).strip() if match else raw.strip()
+
+    def invoke(self, messages):
+        question = self._extract_question(messages)
+        last_err = None
+        # Two distinct failure modes from a free-tier HF Space:
+        #   1. Read timeout -> Space was asleep, woke up mid-request. One
+        #      retry after it's had time to finish loading usually works.
+        #   2. HTTP 503 -> Space container is unhealthy: still booting,
+        #      crashed, OOM'd, or (on some tiers) fully paused. A paused
+        #      Space needs the OWNER to restart it from the HF dashboard --
+        #      no client-side retry fixes that. We still retry a couple of
+        #      times with backoff in case it's mid-boot, but don't pretend
+        #      retries can fix a genuinely down/paused Space.
+        delays = [5, 15]  # seconds between attempts 1->2 and 2->3
+        for attempt in range(len(delays) + 1):
+            try:
+                resp = requests.post(
+                    f"{self.base_url}/query",
+                    json={"query": question, "top_k": self.top_k},
+                    timeout=self.timeout,
+                )
+                if resp.status_code == 503:
+                    last_err = requests.HTTPError(
+                        "503 Service Unavailable (Space booting, crashed, or paused)"
+                    )
+                    if attempt < len(delays):
+                        time.sleep(delays[attempt])
+                    continue
+                resp.raise_for_status()
+                answer = resp.json().get("response", "(No response field returned by Charitra API.)")
+                return AIMessage(content=answer)
+            except requests.Timeout as e:
+                last_err = e
+                continue  # likely a cold start -- try again
+            except requests.RequestException as e:
+                last_err = e
+                break  # non-timeout, non-503 errors (4xx, connection refused) won't fix themselves
+
+        return AIMessage(content=(
+            f"(Charitra API unavailable after retries: {last_err}. This is a "
+            f"third-party public demo Space ({self.base_url}) -- if it's paused "
+            f"or crashed, only its owner can restart it. Check its live status "
+            f"at https://huggingface.co/spaces/lijoraju/charitra-backend before "
+            f"retrying further.)"
+        ))
+
+    async def astream(self, messages):
+        loop = asyncio.get_event_loop()
+        msg  = await loop.run_in_executor(None, self.invoke, messages)
+        yield AIMessageChunk(content=msg.content)
+
+
+class TinyLlamaLocalChat:
+    """
+    Wraps ChatLlamaCpp to fix a prompt-format mismatch, not just wrap the
+    model directly.
+
+    This app's PROMPT_TEMPLATE / worksheet prompts are written for large
+    instruction-following models (DeepSeek/NVIDIA/Groq) -- CBSE-tutor
+    persona, anti-hallucination rules, step-numbering, calculate-tool
+    instructions, etc. But per customizedmodel.txt, this TinyLlama-1.1B
+    checkpoint was fine-tuned on a much simpler format:
+
+        Context:<chunk1><chunk2><chunk3>
+        Question: <question>
+
+    A 1.1B model has very little capacity to generalize to a prompt shape
+    it never saw during fine-tuning -- sent the elaborate CBSE prompt as-is,
+    it mostly ignores the instructions and falls back to its own training
+    habits, producing a looser, "approximate" answer instead of a precise,
+    context-grounded one. Rewriting the prompt to match its actual
+    fine-tuning format before it ever reaches the model is the single
+    biggest lever for getting closer to the exact/grounded answers this
+    checkpoint is actually capable of.
+    """
+    def __init__(self, chat_llama_cpp):
+        self._llm = chat_llama_cpp
+
+    @staticmethod
+    def _rewrite(messages):
+        raw = ""
+        for m in reversed(messages):
+            content = getattr(m, "content", None)
+            if content is None and isinstance(m, dict):
+                content = m.get("content")
+            if content:
+                raw = content
+                break
+
+        ctx_match = re.search(r"CONTEXT:\s*(.*?)\s*---\s*QUESTION:", raw, re.DOTALL | re.IGNORECASE)
+        q_match   = re.search(r"QUESTION:\s*(.*?)\s*ANSWER:", raw, re.DOTALL | re.IGNORECASE)
+
+        if ctx_match and q_match:
+            context  = ctx_match.group(1).strip()
+            question = q_match.group(1).strip()
+            simplified = f"Context:{context}\nQuestion: {question}\n"
+            return [HumanMessage(content=simplified)]
+
+        # Couldn't find the CONTEXT:/QUESTION: markers (e.g. worksheet
+        # prompts, which have a different shape) -- pass through
+        # unchanged. Worksheet generation is blocked for this provider in
+        # api.py anyway, so this path is mainly a safety net.
+        return messages
+
+    def invoke(self, messages):
+        return self._llm.invoke(self._rewrite(messages))
+
+    async def astream(self, messages):
+        async for chunk in self._llm.astream(self._rewrite(messages)):
+            yield chunk
 
 
 @tool
@@ -95,10 +266,57 @@ class CBSERagChain:
 
         # LLM_PROVIDER selects which backend to use without touching code.
         # Options: "deepseek" (default, direct DeepSeek API) | "nvidia" (NIM
-        # hosted catalog) | "groq" (Llama via Groq).
+        # hosted catalog) | "groq" (Llama via Groq) | "customized" (calls
+        # the deployed Charitra HF Space endpoint in the cloud — see
+        # CharitraCloudChat above for what this bypasses) | "customized_local"
+        # (loads the same fine-tuned TinyLlama GGUF locally via
+        # llama-cpp-python — no network dependency, no cloud Space uptime
+        # risk, but you own the download + the CPU inference cost).
         provider = os.getenv("LLM_PROVIDER", "deepseek").lower()
 
-        if provider == "nvidia":
+        if provider == "customized_local":
+            # Local fine-tuned model (see customizedmodel.txt) — runs fully
+            # offline via llama-cpp-python, no API key or network call
+            # needed once the file is on disk.
+            #
+            # NOTE ON TOOL CALLING: TinyLlama-1.1B is NOT a reliable tool-
+            # calling model. We deliberately do NOT call .bind_tools() here
+            # — astream_with_tools() and ask() already handle "no
+            # tool_calls returned" gracefully, so nothing breaks, but
+            # expect weaker arithmetic accuracy (numbered step-by-step
+            # math, "numbers between X and Y" counting, etc.) on this
+            # provider compared to deepseek/nvidia/groq.
+            from langchain_community.chat_models import ChatLlamaCpp
+
+            model_path = os.getenv("CUSTOM_MODEL_PATH", "models/tinyllama-merged.gguf")
+            if not os.path.exists(model_path):
+                raise FileNotFoundError(
+                    f"CUSTOM_MODEL_PATH not found: {model_path!r}. Run "
+                    f"download_model.py (or the huggingface-cli command in "
+                    f"its docstring) to fetch tinyllama-merged.gguf from "
+                    f"https://huggingface.co/lijoraju/edurag-model, or set "
+                    f"CUSTOM_MODEL_PATH to wherever you already saved it."
+                )
+
+            self.llm = TinyLlamaLocalChat(ChatLlamaCpp(
+                model_path=model_path,
+                temperature=float(os.getenv("LLM_TEMPERATURE", 0.0)),
+                max_tokens=int(os.getenv("LLM_MAX_TOKENS", 1024)),
+                n_ctx=int(os.getenv("LLM_N_CTX", 4096)),
+                n_gpu_layers=int(os.getenv("LLM_GPU_LAYERS", 0)),  # 0 = CPU only
+                n_batch=int(os.getenv("LLM_N_BATCH", 256)),
+                verbose=False,
+            ))
+
+        elif provider == "customized":
+            self.llm = CharitraCloudChat(
+                base_url=os.getenv("CHARITRA_API_URL"),
+                top_k=int(os.getenv("CHARITRA_TOP_K", 3)),
+                timeout=int(os.getenv("CHARITRA_TIMEOUT", 180)),
+            )
+            # No .bind_tools() — this endpoint has no concept of tool calls.
+
+        elif provider == "nvidia":
             self.llm = ChatNVIDIA(
                 model=os.getenv("LLM_MODEL", "nvidia/nemotron-3-ultra-550b-a55b"),
                 api_key=os.getenv("NVIDIA_API_KEY"),

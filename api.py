@@ -223,6 +223,42 @@ async def answer_stream(req: AskRequest) -> AsyncGenerator[str, None]:
     yield sse({"type":"status","message":"Searching NCERT textbooks…"})
     await asyncio.sleep(0)
 
+    # The "customized" provider (deployed Charitra HF Space) does its own
+    # retrieval internally over its own fixed corpus (NCERT Class 10 Social
+    # Science) and ignores the context this app builds. We still run our
+    # own retrieval below so sources/confidence are shown in the UI as
+    # usual, but the ANSWER TEXT itself will only ever reflect that fixed
+    # corpus, regardless of req.class_name / req.subject.
+    if os.getenv("LLM_PROVIDER", "deepseek").lower() == "customized":
+        yield sse({
+            "type": "warning",
+            "message": (
+                "LLM_PROVIDER=customized answers from a fixed NCERT Class 10 "
+                "Social Science model, regardless of the class/subject selected."
+            )
+        })
+        await asyncio.sleep(0)
+        yield sse({
+            "type": "status",
+            "message": "Calling Charitra model (may take up to 2-3 min if it's waking from sleep)…"
+        })
+        await asyncio.sleep(0)
+
+    # "customized_local" still uses this app's own retriever/class/subject
+    # filters normally (unlike the cloud "customized" provider above) --
+    # only the generation model differs. Flag the weaker arithmetic/tool-
+    # calling accuracy so it isn't mistaken for a bug.
+    if os.getenv("LLM_PROVIDER", "deepseek").lower() == "customized_local":
+        yield sse({
+            "type": "warning",
+            "message": (
+                "LLM_PROVIDER=customized_local uses a small local TinyLlama model -- "
+                "expect weaker arithmetic accuracy than deepseek/nvidia/groq, since it "
+                "can't reliably use the calculate tool."
+            )
+        })
+        await asyncio.sleep(0)
+
     # Retrieve + re-rank (returns list of dicts)
     try:
         retriever = get_rag_chain().retriever
@@ -471,6 +507,24 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
         yield sse({"type":"error","message":f"Invalid subject: {req.subject}"}); return
     if not req.question_types:
         yield sse({"type":"error","message":"Select at least one question type."}); return
+
+    # Neither "customized" (cloud endpoint, returns single free-text
+    # answers) nor "customized_local" (TinyLlama-1.1B, too small to
+    # reliably follow strict JSON-schema instructions) can produce the
+    # structured multi-section JSON a worksheet needs. Fail fast with a
+    # clear explanation rather than attempting it and hitting JSON parse
+    # errors every time.
+    _provider = os.getenv("LLM_PROVIDER", "deepseek").lower()
+    if _provider in ("customized", "customized_local"):
+        yield sse({
+            "type": "error",
+            "message": (
+                f"Worksheet generation isn't available with LLM_PROVIDER={_provider} "
+                "(this model can't reliably produce structured worksheet JSON). "
+                "Switch LLM_PROVIDER to deepseek, nvidia, or groq to generate worksheets."
+            )
+        })
+        return
 
     yield sse({"type":"status","message":"Searching NCERT textbooks for relevant content…"})
     await asyncio.sleep(0)
