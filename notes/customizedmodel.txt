@@ -1,0 +1,30 @@
+Option 1: Use the deployed API directly (easiest)
+Charitra's backend is already publicly deployed on Hugging Face Spaces. You can hit it right now with a simple curl request:
+
+curl -X POST https://lijoraju-charitra-backend.hf.space/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is democracy?", "top_k": 3}'
+It also has interactive Swagger docs where you can test it in-browser at https://lijoraju-charitra-backend.hf.space/docs.
+
+Response format looks like:
+
+{"response": "Democracy is a form of government in which the rulers are elected by the people."}
+Note: this only knows NCERT Class 10 Social Science — it'll be useless for other subjects/classes since that's the only corpus it was trained/indexed on.
+
+Option 2: Run the model yourself locally
+This gives you more control and lets you swap in your own textbook corpus. The full code is public on GitHub: github.com/lijoraju/charitra-retrieval-augmented-qa
+
+488  cd models/
+  489  huggingface-cli download lijoraju/edurag-model tinyllama-merged.gguf --local-dir .
+  490  hf download lijoraju/edurag-model tinyllama-merged.gguf --local-dir .
+
+To reproduce the setup:
+
+Get the merged GGUF model — it's hosted on Hugging Face Hub (the repo downloads tinyllama-merged.gguf at Docker build time), so you'd pull that directly rather than fine-tuning from scratch.
+Load it with llama-cpp-python for CPU inference:
+from llama_cpp import Llamallm = Llama(model_path="tinyllama-merged.gguf")
+Pair it with the FAISS retriever — you'd need the same FAISS index (built over the NCERT chunks) plus the all-MiniLM-L6-v2 embedding model to do the retrieval step.
+Construct the RAG prompt the same way the project does:
+Context:<chunk1><chunk2><chunk3>Question: <your question>
+Run inference through the loaded GGUF model to get the grounded answer.
+If you actually want to fine-tune your own version (e.g., on a different subject or class), you'd need to replicate Phase 2 from the article: generate QA pairs from your own textbook chunks (they used Zephyr-7B to auto-generate these), clean/filter them, then fine-tune TinyLlama/TinyLlama-1.1B-Chat-v1.0 using the transformers + peft + bitsandbytes stack with QLoRA, then merge the adapter with merge_and_unload() and convert to GGUF via llama.cpp's conversion tools.
