@@ -168,8 +168,33 @@
   .ak-explain { color: var(--text-secondary); margin-top: 3px; }
   .ak-missing { color: var(--text-muted); font-style: italic; }
 
+  /* ── GRADING (upload student answers) ── */
+  .grade-panel { margin-top: 1.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem 1.75rem; }
+  .grade-panel-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .grade-panel-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; }
+  .grade-drop-zone { border: 1.5px dashed var(--border-strong); border-radius: 10px; padding: 1.1rem .9rem; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; font-size: 12.5px; color: var(--text-secondary); }
+  .grade-drop-zone:hover, .grade-drop-zone.drag { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-text); }
+  .grade-drop-zone .fname { font-weight: 600; color: var(--text-primary); margin-top: 4px; word-break: break-all; }
+  .grade-drop-zone input { display: none; }
+  .grade-submit-row { margin-top: 10px; }
+  .grade-submit-btn { padding: 9px 14px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 13px; font-weight: 600; font-family: var(--font-ui); cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+  .grade-submit-btn:hover:not(:disabled) { opacity: .88; }
+  .grade-submit-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .grade-score-bar { display: flex; align-items: center; justify-content: space-between; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 10px; padding: .75rem 1.1rem; margin: 14px 0; font-size: 13px; color: var(--accent-text); }
+  .grade-score-bar b { font-size: 15px; }
+  .grade-ocr-note { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+  .grade-item { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.6; }
+  .grade-item:last-child { border-bottom: none; }
+  .grade-item-q { font-weight: 600; margin-bottom: 3px; }
+  .grade-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 100px; font-size: 11px; font-weight: 700; margin-left: 6px; vertical-align: middle; }
+  .grade-badge.right { background: #eafaf0; color: #178a4c; }
+  .grade-badge.wrong { background: var(--danger-bg); color: var(--danger); }
+  .grade-item-student { color: var(--text-secondary); margin-top: 2px; }
+  .grade-item-student i { color: var(--text-muted); }
+  .grade-item-feedback { color: var(--text-muted); margin-top: 2px; font-size: 12.5px; }
+
   @media print {
-    header, .sidebar, .status-panel, #print-btn, #regen-btn, .ak-toggle-row { display: none !important; }
+    header, .sidebar, .status-panel, #print-btn, #regen-btn, .ak-toggle-row, .grade-panel { display: none !important; }
     .main { padding: 0; }
     .worksheet { border: none; border-radius: 0; }
     body { background: white; }
@@ -295,6 +320,9 @@
 
 <script>
 const API = '';  // same-origin — FastAPI serves this file at /worksheet
+
+let flatQuestions = [];   // [{number, type, text, answer}] built from the last generated worksheet, sent to /api/grade-worksheet
+let gradeFile = null;
 
 /* ── topics ── */
 const topics = [];
@@ -465,10 +493,12 @@ function handleEvent(ev, cls, subject, difficulty) {
 function renderWorksheet(ws, cls, subject, difficulty) {
   let qIdx = 0;
   const akItems = [];
+  flatQuestions = [];
   const sections = (ws.sections || []).map(sec => {
     const qs = (sec.questions || []).map(q => {
       qIdx++;
       akItems.push(renderAnswerKeyItem(q, qIdx));
+      flatQuestions.push({ number: qIdx, type: q.type, text: q.text, answer: q.answer });
       return renderQ(q, qIdx);
     }).join('');
     return `<div class="section-heading">${sec.sectionTitle}</div>${qs}`;
@@ -505,7 +535,25 @@ function renderWorksheet(ws, cls, subject, difficulty) {
     <div class="answer-key" id="answer-key">
       <div class="ak-title">📘 Answer Key</div>
       ${akItems.join('')}
+    </div>
+    <div class="grade-panel">
+      <div class="grade-panel-title">📤 Upload student's answers</div>
+      <div class="grade-panel-hint">Upload a photo/scan of the completed worksheet (image or PDF) and it'll be OCR'd and graded against the answer key above — no manual entry needed.</div>
+      <div class="grade-drop-zone" id="grade-drop-zone">
+        <div id="grade-drop-label">📷 Click or drop a photo/scan here</div>
+        <div class="fname" id="grade-fname"></div>
+        <input type="file" id="grade-file-input" accept="image/*,application/pdf" />
+      </div>
+      <div class="grade-submit-row">
+        <button class="grade-submit-btn" id="grade-submit-btn" onclick="submitGrading()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>
+          Grade this submission
+        </button>
+      </div>
+      <div id="grade-results"></div>
     </div>`;
+
+  setupGradeDropZone();
 }
 
 /* Every question the model wrote came with its own grounded answer (see
@@ -534,6 +582,86 @@ function toggleAnswerKey() {
   const btn = document.getElementById('ak-toggle');
   el.classList.toggle('show');
   btn.textContent = el.classList.contains('show') ? '🙈 Hide answer key' : '👁 Show answer key';
+}
+
+/* ── grading: upload student answers, OCR + grade against the answer key ── */
+function setupGradeDropZone() {
+  const zone  = document.getElementById('grade-drop-zone');
+  const input = document.getElementById('grade-file-input');
+  if (!zone || !input) return;
+
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag');
+    if (e.dataTransfer.files.length) setGradeFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => { if (input.files.length) setGradeFile(input.files[0]); });
+}
+
+function setGradeFile(f) {
+  const okExt = /\.(pdf|png|jpe?g|webp|bmp|tiff)$/i.test(f.name);
+  if (!okExt) { showError('Upload a photo/scan (png, jpg, webp) or a PDF.'); return; }
+  gradeFile = f;
+  document.getElementById('grade-drop-label').textContent = '📷 Selected:';
+  document.getElementById('grade-fname').textContent = f.name;
+}
+
+async function submitGrading() {
+  if (!gradeFile) { showError('Choose a photo/scan of the completed worksheet first.'); return; }
+  if (!flatQuestions.length) { showError('Generate a worksheet before grading a submission.'); return; }
+
+  const btn = document.getElementById('grade-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = `<div class="pulse"><span></span><span></span><span></span></div> Reading &amp; grading…`;
+  document.getElementById('grade-results').innerHTML = '';
+
+  const form = new FormData();
+  form.append('file', gradeFile);
+  form.append('answer_key', JSON.stringify(flatQuestions));
+
+  try {
+    const res = await fetch(`${API}/api/grade-worksheet`, { method: 'POST', body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || 'Grading failed');
+    }
+    const data = await res.json();
+    renderGradeResults(data);
+  } catch (e) {
+    showError(`Grading error: ${e.message}`);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg> Grade this submission`;
+}
+
+function renderGradeResults(data) {
+  const items = (data.results || []).map(r => {
+    const q = flatQuestions.find(fq => fq.number === r.questionNumber);
+    const label = q ? `Q${q.number}. ${escapeHtml(q.text)}` : `Q${r.questionNumber}.`;
+    const badge = r.correct
+      ? `<span class="grade-badge right">✓ Correct</span>`
+      : `<span class="grade-badge wrong">✗ Incorrect</span>`;
+    const studentLine = r.studentAnswer
+      ? escapeHtml(String(r.studentAnswer))
+      : `<i>No answer found</i>`;
+    const feedback = r.feedback ? `<div class="grade-item-feedback">${escapeHtml(r.feedback)}</div>` : '';
+    return `
+      <div class="grade-item">
+        <div class="grade-item-q">${label}${badge}</div>
+        <div class="grade-item-student">Student wrote: ${studentLine}</div>
+        ${feedback}
+      </div>`;
+  }).join('');
+
+  document.getElementById('grade-results').innerHTML = `
+    <div class="grade-score-bar">
+      <span>🎓 Score: <b>${data.score} / ${data.total}</b></span>
+      <span class="grade-ocr-note">via ${escapeHtml(data.ocr_method || 'OCR')}</span>
+    </div>
+    ${items}`;
 }
 
 function renderQ(q, i) {

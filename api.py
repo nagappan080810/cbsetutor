@@ -14,6 +14,7 @@ API:
   POST /api/ask                         → SSE streaming answer + confidence
   POST /api/upload                      → Upload PDF + ingest
   POST /api/extract-questions           → Extract questions from PDF
+  POST /api/grade-worksheet             → OCR + grade a student's uploaded answers against a worksheet's answer key
   GET  /api/images/{filename}
   GET  /api/images
   GET  /api/ingest/status
@@ -21,11 +22,13 @@ API:
 
 import os
 import re
+import time
 import json
 import math
 import asyncio
 import shutil
 import tempfile
+import traceback
 from pathlib import Path
 from typing import AsyncGenerator, Literal, Optional
 
@@ -452,7 +455,16 @@ WORKSHEET_PROMPT = """You are an expert CBSE question paper setter for {class_na
 {language_instruction}
 
 Use ONLY the context below from NCERT textbooks to create worksheet questions.
-If context is insufficient, draw from closely related NCERT concepts on the same topic.
+If the context has a small gap, you may fill it with concepts that are ALSO
+taught at the {class_name} level for {subject} -- but NEVER reach for a
+concept, formula, or instrument that belongs to a DIFFERENT class's
+syllabus, even if it feels topically related. For example: a Class 10
+worksheet on lenses/optics must stay within simple lens and mirror
+behaviour and the human eye -- it must NOT include a compound microscope's
+objective/eyepiece, since that is Class 12 Optical Instruments content.
+When you're not sure whether something is actually taught at {class_name}
+level, stick strictly to what's written in the CONTEXT below rather than
+guessing from general knowledge.
 
 TASK: Generate exactly {num_questions} worksheet questions on the topic(s): {topics}
 Question types to include (distribute evenly): {question_types}
@@ -536,6 +548,11 @@ HARD RULES — violating any makes output invalid:
   where you left off. Writing ANY narration around a tool call breaks the
   JSON and makes the entire worksheet fail to parse.
 - Age-appropriate for {class_name}
+- GRADE BOUNDARY: every concept, formula, and named instrument/technique
+  used must actually belong to {class_name}'s own NCERT syllabus for
+  {subject}. Do not import content from a higher or lower class's chapters
+  just because it shares a broad topic name (e.g. "optics", "electricity")
+  with what you were asked to cover.
 - STRICTLY follow the difficulty guidance above — never default to easy recall questions
 - NO DUPLICATE QUESTIONS: every question must test a DIFFERENT fact, concept, or skill.
   Do not ask the same thing twice even with different wording.
@@ -561,6 +578,46 @@ HARD RULES — violating any makes output invalid:
 CONTEXT:
 {context}
 """
+
+GRADING_PROMPT = """You are grading a student's submitted worksheet answers against an answer key.
+
+ANSWER KEY (question number, type, question text, correct answer):
+{answer_key_block}
+
+STUDENT'S SUBMITTED TEXT (extracted via OCR from an uploaded photo/scan --
+it may contain OCR errors, inconsistent spacing, or misread characters, so
+be lenient about spelling/formatting and judge the underlying answer, not
+the exact transcription):
+{student_text}
+
+TASK: For every question in the answer key, locate the student's answer to
+that specific question inside the submitted text (match by question number
+if visible, otherwise by content/position), then grade it.
+
+Return ONLY a JSON array, no markdown fences, no explanation:
+[
+  {{
+    "questionNumber": 1,
+    "studentAnswer": "the student's answer as best extracted, or null if you cannot find/read one for this question",
+    "correct": true,
+    "feedback": "One short, specific sentence: why it's right, or what's missing/wrong."
+  }}
+]
+
+GRADING RULES:
+- MCQ / True-False: correct only if the student's selected option/verdict
+  matches the answer key's -- ignore formatting differences in how they
+  wrote the letter or word.
+- Fill-in-the-blank: correct if the student's word(s) match the answer
+  key's meaning, allowing for OCR noise and reasonable synonyms.
+- Short / long answer: correct if the core concept/fact matches the answer
+  key -- do not require identical wording, but DO require the same key
+  ideas. Partial or vague answers should be marked incorrect, with
+  feedback naming what's missing, not given credit just for effort.
+- If no answer can be found for a question at all, set "studentAnswer" to
+  null and "correct" to false, with feedback "No answer found for this
+  question in the submission."
+- Be honest and consistent. Do not inflate the score."""
 
 QTYPE_SECTION_NAMES = {
     "mcq":       "Multiple Choice Questions",
@@ -985,15 +1042,20 @@ async def extract_questions(
     class_name: str        = Form(...),
     subject:    str        = Form(...)
 ):
+    console.print(f"\n[bold cyan]📄 /api/extract-questions[/bold cyan]  file={file.filename!r}  class={class_name!r}  subject={subject!r}")
+
     if not file.filename.endswith(".pdf"):
+        console.print(f"[red]  ✗ rejected: not a .pdf filename[/red]")
         raise HTTPException(400, "Only PDF files accepted")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         shutil.copyfileobj(file.file, tmp)
         tmp_path = tmp.name
+    console.print(f"[dim]  → saved upload to {tmp_path}[/dim]")
 
     try:
         text = ""
+        pdf_lib_used = None
         try:
             import fitz
             fitz.TOOLS.mupdf_display_errors(False)
@@ -1003,14 +1065,23 @@ async def extract_questions(
                 try: text += page.get_text("text") + "\n"
                 except: pass
             doc.close()
-        except Exception:
+            pdf_lib_used = "fitz (PyMuPDF)"
+        except Exception as e:
+            console.print(f"[yellow]  ⚠ fitz failed ({e}), falling back to pypdf[/yellow]")
             import pypdf
             reader = pypdf.PdfReader(tmp_path, strict=False)
             for page in reader.pages:
                 try: text += (page.extract_text() or "") + "\n"
                 except: pass
+            pdf_lib_used = "pypdf (fallback)"
+
+        console.print(f"[dim]  → extracted {len(text)} chars via {pdf_lib_used}[/dim]")
+        if text.strip():
+            preview = text.strip()[:200].replace("\n", " ")
+            console.print(f"[dim]  → text preview: {preview!r}...[/dim]")
 
         if not text.strip():
+            console.print(f"[red]  ✗ no text extracted from PDF (likely a scanned/image-only PDF)[/red]")
             raise HTTPException(422, "Could not extract text from PDF")
 
         extraction_prompt = f"""Extract ALL questions from this question paper.
@@ -1022,24 +1093,229 @@ PAPER:
 {text[:6000]}"""
 
         from langchain_core.messages import HumanMessage
-        response = await get_rag_chain().llm.ainvoke([HumanMessage(content=extraction_prompt)])
-        raw = re.sub(r"^```(?:json)?","",response.content.strip()).strip()
-        raw = re.sub(r"```$","",raw).strip()
+        console.print(f"[dim]  → calling llm_raw.ainvoke (prompt {len(extraction_prompt)} chars)…[/dim]")
+        t0 = time.monotonic()
+        try:
+            # llm_raw has no tools bound -- extraction never needs `calculate`,
+            # and using the tool-bound client here previously risked a
+            # tool_call turn with empty/non-string `.content` that this
+            # endpoint had no way to execute or continue, surfacing as an
+            # unguarded 500.
+            response = await asyncio.wait_for(
+                get_rag_chain().llm_raw.ainvoke([HumanMessage(content=extraction_prompt)]),
+                timeout=60.0,
+            )
+        except asyncio.TimeoutError:
+            console.print(f"[red]  ✗ LLM call timed out after {time.monotonic()-t0:.1f}s[/red]")
+            raise HTTPException(504, "Extraction timed out — try a shorter or cleaner PDF")
+        console.print(f"[dim]  ← LLM responded in {time.monotonic()-t0:.1f}s[/dim]")
 
-        questions = json.loads(raw)
+        content = response.content
+        console.print(f"[dim]  → response.content type: {type(content).__name__}[/dim]")
+        if isinstance(content, list):
+            # Some provider integrations return content as a list of blocks
+            # rather than a plain string; pull the text back out defensively.
+            console.print(f"[yellow]  ⚠ content was a list of {len(content)} block(s), not a plain string[/yellow]")
+            content = "".join(
+                (b.get("text", "") if isinstance(b, dict) else str(b))
+                for b in content
+            )
+        content = content or ""
+
+        raw_preview = content.strip()[:300].replace("\n", " ")
+        console.print(f"[dim]  → raw content ({len(content)} chars): {raw_preview!r}...[/dim]")
+
+        raw = re.sub(r"^```(?:json)?", "", content.strip()).strip()
+        raw = re.sub(r"```$", "", raw).strip()
+        if not raw:
+            console.print(f"[red]  ✗ model returned empty content — possible tool-call-only turn or provider error[/red]")
+            raise HTTPException(422, "Model returned no extractable questions — try a cleaner PDF")
+
+        try:
+            questions = json.loads(raw)
+        except json.JSONDecodeError as e:
+            console.print(f"[red]  ✗ JSON parse failed at char {e.pos}: {e.msg}[/red]")
+            console.print(f"[red]     full raw text: {raw!r}[/red]")
+            raise
+
         allowed   = {"mcq","true_false","short","long","fill"}
         valid     = [
             {"text":q["text"].strip(), "type":q.get("type","short") if q.get("type") in allowed else "short"}
             for q in questions if isinstance(q,dict) and q.get("text","").strip()
         ]
+        console.print(f"[green]  ✓ extracted {len(valid)}/{len(questions)} valid questions[/green]")
         return {"questions":valid,"total":len(valid)}
 
+    except HTTPException:
+        raise
     except json.JSONDecodeError:
         raise HTTPException(422, "Could not parse questions — try a cleaner PDF")
     except Exception as e:
+        console.print(f"[bold red]  ✗ unexpected error in extract_questions:[/bold red]")
+        console.print(traceback.format_exc())
         raise HTTPException(500, str(e))
     finally:
         os.unlink(tmp_path)
+        console.print(f"[dim]  → cleaned up {tmp_path}[/dim]")
+
+
+def _extract_text_from_upload(tmp_path: str, filename: str) -> tuple[str, str]:
+    """
+    Extract text from an uploaded PDF or image. Returns (text, method_used)
+    for debug logging. PDFs use the same fitz/pypdf fallback pattern as
+    extract_questions; images go through Tesseract OCR (pytesseract) --
+    fully open-source, no paid vision API call.
+
+    Known limitation: Tesseract handles printed text and clear block
+    handwriting reasonably well, but accuracy drops on cursive handwriting.
+    If your students' handwriting isn't recognized reliably, the free
+    upgrade paths are EasyOCR or a TrOCR handwriting model -- both are
+    open-source and can be dropped in here without touching the endpoint.
+    """
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+
+    if ext == "pdf":
+        text = ""
+        try:
+            import fitz
+            fitz.TOOLS.mupdf_display_errors(False)
+            fitz.TOOLS.mupdf_display_warnings(False)
+            doc = fitz.open(tmp_path)
+            for page in doc:
+                try: text += page.get_text("text") + "\n"
+                except: pass
+            doc.close()
+            return text, "fitz (PyMuPDF)"
+        except Exception as e:
+            console.print(f"[yellow]  ⚠ fitz failed ({e}), falling back to pypdf[/yellow]")
+            import pypdf
+            reader = pypdf.PdfReader(tmp_path, strict=False)
+            for page in reader.pages:
+                try: text += (page.extract_text() or "") + "\n"
+                except: pass
+            return text, "pypdf (fallback)"
+
+    elif ext in ("png", "jpg", "jpeg", "webp", "bmp", "tiff"):
+        try:
+            import pytesseract
+            from PIL import Image
+        except ImportError:
+            raise HTTPException(
+                500,
+                "OCR dependencies missing on the server. Install with: "
+                "pip install pytesseract Pillow --break-system-packages, "
+                "and install the Tesseract binary itself (e.g. "
+                "'apt install tesseract-ocr' on Debian/Ubuntu — pytesseract "
+                "is just a Python wrapper around that binary)."
+            )
+        img = Image.open(tmp_path)
+        text = pytesseract.image_to_string(img)
+        return text, "pytesseract (Tesseract OCR)"
+
+    else:
+        raise HTTPException(400, f"Unsupported file type '.{ext}' — upload a PDF or image (png/jpg/webp)")
+
+
+@app.post("/api/grade-worksheet")
+async def grade_worksheet(
+    file:       UploadFile = File(...),
+    answer_key: str        = Form(...),   # JSON string: [{"number":1,"type":"mcq","text":"...","answer":"B"}, ...]
+                                           # built client-side from the worksheet already generated in this session
+):
+    console.print(f"\n[bold cyan]📝 /api/grade-worksheet[/bold cyan]  file={file.filename!r}")
+
+    try:
+        key_items = json.loads(answer_key)
+    except json.JSONDecodeError as e:
+        raise HTTPException(400, f"Invalid answer_key JSON: {e}")
+    if not isinstance(key_items, list) or not key_items:
+        raise HTTPException(400, "answer_key must be a non-empty JSON array")
+    console.print(f"[dim]  → answer key has {len(key_items)} question(s)[/dim]")
+
+    suffix = os.path.splitext(file.filename)[1] or ".bin"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+    console.print(f"[dim]  → saved upload to {tmp_path}[/dim]")
+
+    try:
+        student_text, method = _extract_text_from_upload(tmp_path, file.filename)
+        console.print(f"[dim]  → extracted {len(student_text)} chars via {method}[/dim]")
+        if student_text.strip():
+            preview = student_text.strip()[:200].replace("\n", " ")
+            console.print(f"[dim]  → text preview: {preview!r}...[/dim]")
+
+        if not student_text.strip():
+            console.print(f"[red]  ✗ no text extracted from upload[/red]")
+            raise HTTPException(
+                422,
+                "Could not read any text from this upload — try a clearer, "
+                "well-lit photo, a higher-resolution scan, or block/printed "
+                "handwriting rather than cursive."
+            )
+
+        answer_key_block = "\n".join(
+            f"Q{item.get('number', i+1)}. [{item.get('type','short')}] {item.get('text','')}\n"
+            f"   Correct answer: {item.get('answer','')}"
+            for i, item in enumerate(key_items)
+        )
+        prompt = GRADING_PROMPT.format(
+            answer_key_block=answer_key_block,
+            student_text=student_text[:6000],
+        )
+
+        from langchain_core.messages import HumanMessage
+        console.print(f"[dim]  → calling llm_raw.ainvoke for grading…[/dim]")
+        t0 = time.monotonic()
+        try:
+            response = await asyncio.wait_for(
+                get_rag_chain().llm_raw.ainvoke([HumanMessage(content=prompt)]),
+                timeout=60.0,
+            )
+        except asyncio.TimeoutError:
+            console.print(f"[red]  ✗ grading LLM call timed out after {time.monotonic()-t0:.1f}s[/red]")
+            raise HTTPException(504, "Grading timed out — please try again")
+        console.print(f"[dim]  ← graded in {time.monotonic()-t0:.1f}s[/dim]")
+
+        content = response.content
+        if isinstance(content, list):
+            content = "".join((b.get("text", "") if isinstance(b, dict) else str(b)) for b in content)
+        content = content or ""
+
+        raw = re.sub(r"^```(?:json)?", "", content.strip()).strip()
+        raw = re.sub(r"```$", "", raw).strip()
+        if not raw:
+            console.print(f"[red]  ✗ model returned empty grading content[/red]")
+            raise HTTPException(422, "Model returned no grading result — try again")
+
+        try:
+            graded = json.loads(raw)
+        except json.JSONDecodeError as e:
+            console.print(f"[red]  ✗ grading JSON parse failed at char {e.pos}: {e.msg}[/red]")
+            console.print(f"[red]     full raw text: {raw!r}[/red]")
+            raise
+
+        correct_count = sum(1 for g in graded if isinstance(g, dict) and g.get("correct"))
+        console.print(f"[green]  ✓ graded {len(graded)}/{len(key_items)} questions — {correct_count} correct[/green]")
+
+        return {
+            "results":    graded,
+            "score":      correct_count,
+            "total":      len(key_items),
+            "ocr_method": method,
+        }
+
+    except HTTPException:
+        raise
+    except json.JSONDecodeError:
+        raise HTTPException(422, "Could not parse grading result — try again")
+    except Exception as e:
+        console.print(f"[bold red]  ✗ unexpected error in grade_worksheet:[/bold red]")
+        console.print(traceback.format_exc())
+        raise HTTPException(500, str(e))
+    finally:
+        os.unlink(tmp_path)
+        console.print(f"[dim]  → cleaned up {tmp_path}[/dim]")
 
 @app.get("/api/images/{filename}")
 def get_image(filename: str):
