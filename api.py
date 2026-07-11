@@ -110,7 +110,23 @@ BASE_PROMPT = """You are an expert CBSE tutor for {class_name}, subject: {subjec
 {language_instruction}
 
 Use ONLY the context below from NCERT textbooks to answer.
-If the answer is not in the context, say so clearly.
+
+GROUNDING RULES:
+- Do NOT invent facts, data, dates, or formulas that are not present in the
+  CONTEXT below, even if you recall them from general knowledge.
+- However, if the CONTEXT gives you a formula, rule, or method (e.g. the
+  mirror/lens formula, a percentage/ratio rule, an algebraic identity), you
+  MAY and SHOULD apply that formula to the exact numbers given in the
+  QUESTION, even if this specific numeric example is not written verbatim
+  in the textbook. Applying a textbook formula to new numbers is normal
+  problem-solving, not hallucination -- only decline to answer when the
+  underlying CONCEPT or FORMULA itself is missing from the CONTEXT, never
+  merely because the specific numbers in the question don't appear there.
+- For ANY arithmetic, algebra, or numeric result -- including rearranging
+  a formula from the context to solve for an unknown -- ALWAYS call the
+  `calculate` tool to get the exact value instead of computing it mentally.
+- If the CONTEXT truly doesn't cover the relevant concept/formula at all,
+  say so clearly instead of guessing.
 
 ANSWER FORMAT:
 {answer_mode_instruction}
@@ -138,6 +154,7 @@ class AskRequest(BaseModel):
     subject:     str     = Field(..., example="mathematics")
     max_context: int     = Field(2000, ge=500, le=5000)
     answer_mode: Literal["detailed","brief","one_line","mcq","true_false"] = "detailed"
+    topics:      list[str] = Field(default_factory=list)   # optional topic hints (e.g. a teacher tagging an uploaded paper in quiz.html) used to widen/ground retrieval alongside the question text itself
 
 class WorksheetRequest(BaseModel):
     class_name:   str        = Field(..., example="class_10")
@@ -213,6 +230,25 @@ def confidence_color(pct: float) -> str:
 def sse(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
+async def _iter_with_timeout(agen, timeout: float = 45.0):
+    """
+    Wrap an async generator so that if any single step stalls for longer
+    than `timeout` seconds, we raise asyncio.TimeoutError instead of hanging
+    silently. This matters specifically for astream_with_tools(): a tool
+    round-trip (e.g. a `calculate` call mid-generation) means a fresh LLM
+    provider request gets made mid-stream, and if that particular request
+    stalls or the provider drops the connection without an error, the caller
+    previously saw nothing at all -- no more tokens, no error event, just an
+    indefinitely "stuck" request with no feedback in the UI.
+    """
+    it = agen.__aiter__()
+    while True:
+        try:
+            item = await asyncio.wait_for(it.__anext__(), timeout=timeout)
+        except StopAsyncIteration:
+            return
+        yield item
+
 # ── SSE generator ─────────────────────────────────────────────────────────────
 async def answer_stream(req: AskRequest) -> AsyncGenerator[str, None]:
     if req.class_name not in SUPPORTED_CLASSES:
@@ -231,6 +267,32 @@ async def answer_stream(req: AskRequest) -> AsyncGenerator[str, None]:
             class_filter=req.class_name,
             subject_filter=req.subject
         )
+
+        # Widen with topic-based retrieval if the caller supplied topics
+        # (e.g. a teacher tagging an uploaded question paper in quiz.html
+        # before answering it). An extracted question's exact wording can
+        # be noisy -- OCR artefacts, exam-style phrasing, paraphrasing --
+        # and may not embed close to the textbook's own wording even when
+        # the concept is covered well. A topic name like "Reflection of
+        # Light" usually retrieves the right section directly, so merging
+        # that pool in (deduped by source+page) raises the confidence floor
+        # instead of leaving the answer to rely on the question text alone.
+        if req.topics:
+            seen_keys = {
+                f"{r['doc'].metadata.get('source','')}:{r['doc'].metadata.get('page','')}"
+                for r in results
+            }
+            for topic in req.topics:
+                topic_results = retriever.retrieve_and_rerank(
+                    topic, class_filter=req.class_name, subject_filter=req.subject
+                )
+                for r in topic_results:
+                    key = f"{r['doc'].metadata.get('source','')}:{r['doc'].metadata.get('page','')}"
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        results.append(r)
+            results.sort(key=lambda r: r["confidence"], reverse=True)
+            results = results[:8]   # keep the merged pool bounded
     except Exception as e:
         yield sse({"type":"error","message":f"Retrieval error: {e}"}); return
 
@@ -318,11 +380,20 @@ async def answer_stream(req: AskRequest) -> AsyncGenerator[str, None]:
         # `prompt` built above entirely -- meaning the retrieved textbook
         # context and anti-hallucination rules were never actually reaching
         # the model here. Fixed to use `prompt`.
-        async for token in get_rag_chain().astream_with_tools([HumanMessage(content=prompt)]):
+        async for token in _iter_with_timeout(
+            get_rag_chain().astream_with_tools([HumanMessage(content=prompt)]),
+            timeout=45.0,
+        ):
             visible = re.sub(r"<think>.*", "", token, flags=re.DOTALL)
             if visible:
                 yield sse({"type":"token","data":visible})
                 await asyncio.sleep(0)
+    except asyncio.TimeoutError:
+        yield sse({
+            "type":"error",
+            "message":"Generation stalled and didn't respond for 45s. Please try again."
+        })
+        return
     except Exception as e:
         console.print(f"error {e}")
         yield sse({"type":"error","message":f"LLM error: {e}"}); return
@@ -389,6 +460,25 @@ Question types to include (distribute evenly): {question_types}
 
 {difficulty_guidance}
 
+ANSWER KEY REQUIREMENT — every question you write must also carry its own
+answer, generated right now while you still have the context in front of
+you (this is far more reliable than answering it later from a fresh,
+lower-confidence retrieval on the question text alone):
+- For "mcq": "answer" = just the correct option letter (e.g. "B"),
+  "explanation" = 1-2 sentences grounded in the CONTEXT for why it's correct.
+- For "truefalse": "answer" = "TRUE" or "FALSE",
+  "explanation" = 1-2 sentences grounded in the CONTEXT.
+- For "fillblank": "answer" = the exact word/phrase for each blank, in
+  order, comma-separated if there are multiple blanks.
+- For "short" / "long": "answer" = a model answer grounded in the CONTEXT,
+  as many sentences/steps as the question warrants.
+- If the question involves any arithmetic, algebra, or numeric result,
+  ALWAYS call the `calculate` tool to get the exact value for the answer
+  field instead of computing it mentally -- even if the underlying formula
+  is from the CONTEXT and the specific numbers in the question are new.
+  Applying a textbook formula to new numbers is normal question-setting,
+  not hallucination.
+
 STRICT JSON OUTPUT — return ONLY this JSON object, no markdown fences, no preamble:
 {{
   "title": "Worksheet title",
@@ -401,23 +491,30 @@ STRICT JSON OUTPUT — return ONLY this JSON object, no markdown fences, no prea
         {{
           "type": "mcq",
           "text": "Question text here",
-          "options": ["A. option1", "B. option2", "C. option3", "D. option4"]
+          "options": ["A. option1", "B. option2", "C. option3", "D. option4"],
+          "answer": "B",
+          "explanation": "Why B is correct, grounded in the context."
         }},
         {{
           "type": "short",
-          "text": "Short answer question here"
+          "text": "Short answer question here",
+          "answer": "The model answer, grounded in the context."
         }},
         {{
           "type": "truefalse",
-          "text": "Statement for true/false"
+          "text": "Statement for true/false",
+          "answer": "TRUE",
+          "explanation": "Why, grounded in the context."
         }},
         {{
           "type": "fillblank",
-          "text": "Sentence with ___ for blank(s)"
+          "text": "Sentence with ___ for blank(s)",
+          "answer": "the missing word or phrase"
         }},
         {{
           "type": "long",
-          "text": "Essay or long answer question"
+          "text": "Essay or long answer question",
+          "answer": "The full model answer, grounded in the context."
         }}
       ]
     }}
@@ -426,9 +523,18 @@ STRICT JSON OUTPUT — return ONLY this JSON object, no markdown fences, no prea
 
 HARD RULES — violating any makes output invalid:
 - Group questions by type into separate sections
+- EVERY question object MUST include a non-empty "answer" field as described above
 - MCQ must have exactly 4 options labeled A–D; exactly one must be correct
 - Fill-in-the-blank must place ___ in the sentence for each blank
 - Questions must be grounded in the CONTEXT below
+- SILENT TOOL USE: your entire visible output, from the very first character
+  to the very last, must be the JSON object and NOTHING else. If you need
+  the `calculate` tool for a numeric answer, call it with ZERO other text in
+  that turn — no lead-in sentence like "Now let me compute...", no
+  commentary, no explanation of what you're about to calculate. Call the
+  tool silently, wait for its result, then resume writing the JSON exactly
+  where you left off. Writing ANY narration around a tool call breaks the
+  JSON and makes the entire worksheet fail to parse.
 - Age-appropriate for {class_name}
 - STRICTLY follow the difficulty guidance above — never default to easy recall questions
 - NO DUPLICATE QUESTIONS: every question must test a DIFFERENT fact, concept, or skill.
@@ -689,10 +795,21 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
     full_response = ""
     try:
         from langchain_core.messages import HumanMessage
-        async for token in get_rag_chain().astream_with_tools([HumanMessage(content=prompt)]):
+        async for token in _iter_with_timeout(
+            get_rag_chain().astream_with_tools([HumanMessage(content=prompt)]),
+            timeout=45.0,
+        ):
             full_response += token
             yield sse({"type":"progress","data":token})
             await asyncio.sleep(0)
+    except asyncio.TimeoutError:
+        yield sse({
+            "type":"error",
+            "message":"Generation stalled (likely during a calculation step) and "
+                       "didn't respond for 45s. Please try again — if it keeps "
+                       "happening, try fewer questions or a narrower topic."
+        })
+        return
     except Exception as e:
         yield sse({"type":"error","message":f"LLM error: {e}"}); return
 

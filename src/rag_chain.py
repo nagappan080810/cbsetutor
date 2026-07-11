@@ -124,7 +124,7 @@ class CBSERagChain:
                 max_tokens=2048,
             ).bind_tools([calculate])
 
-    async def astream_with_tools(self, messages, max_tool_iterations: int = 3):
+    async def astream_with_tools(self, messages, max_tool_iterations: int = 4):
         """
         Async token-streaming generator that transparently handles
         `calculate` tool calls mid-stream. Shared by CLI (ask()) callers
@@ -148,9 +148,18 @@ class CBSERagChain:
                 gathered = chunk if gathered is None else gathered + chunk
 
             tool_calls = getattr(gathered, "tool_calls", None) if gathered else None
-            if not tool_calls or iterations >= max_tool_iterations:
+
+            if not tool_calls:
                 break
 
+            # Always execute the tool calls the model just requested and
+            # feed the results back in, regardless of the iteration cap --
+            # previously, hitting the cap while tool_calls was still truthy
+            # caused an immediate `break` here, discarding this turn
+            # entirely. That meant zero visible text was ever yielded for
+            # questions needing >= max_tool_iterations calculate() calls
+            # (e.g. multi-step physics problems), even though the model
+            # never got a chance to write its final answer.
             messages.append(gathered)
             for tool_call in tool_calls:
                 if tool_call["name"] == "calculate":
@@ -160,6 +169,27 @@ class CBSERagChain:
                     messages.append(
                         ToolMessage(content=str(tool_result), tool_call_id=tool_call["id"])
                     )
+
+            if iterations >= max_tool_iterations:
+                # Force one final, tool-free turn so the model always
+                # produces visible output instead of silently ending here.
+                # Deliberately format-neutral -- this same method backs both
+                # free-text Q&A (api.py's /api/ask) and strict-JSON worksheet
+                # generation (api.py's worksheet_stream), so it must not tell
+                # the model to switch to "plain text" when it may actually be
+                # mid-way through a JSON object it still needs to close out.
+                messages.append(HumanMessage(
+                    content="You now have all the tool results you need. "
+                            "Continue and complete your response now, in "
+                            "exactly the format you were already asked to "
+                            "use -- do not call any more tools."
+                ))
+                async for chunk in self.llm.astream(messages):
+                    if chunk.content:
+                        console.print(f"content generated (final turn)...{chunk.content}")
+                        yield chunk.content
+                break
+
             iterations += 1
 
     def ask(

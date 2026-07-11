@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quiz Solver — CBSE RAG</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --surface-2: #f0ede6;
+    --border: #e0dbd0;
+    --border-strong: #c8c2b4;
+    --text-primary: #1a1a18;
+    --text-secondary: #6b6760;
+    --text-muted: #9c9890;
+    --accent: #4a7c59;
+    --accent-bg: #eef5f1;
+    --accent-border: #b8d5c4;
+    --accent-text: #2d5c3f;
+    --danger: #c0392b;
+    --danger-bg: #fdf0ee;
+    --radius: 8px;
+    --font-ui: system-ui, -apple-system, sans-serif;
+    --font: Georgia, 'Times New Roman', serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18; --surface: #242422; --surface-2: #2c2c29;
+      --border: #3a3a36; --border-strong: #4e4e49;
+      --text-primary: #f0ede6; --text-secondary: #9c9890; --text-muted: #6b6760;
+      --accent: #6aab81; --accent-bg: #1a2e22; --accent-border: #2d5c3f; --accent-text: #9ed4b4;
+      --danger-bg: #2e1a1a;
+    }
+  }
+
+  body { font-family: var(--font-ui); background: var(--bg); color: var(--text-primary); min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── NAV ── */
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem; height: 52px; display: flex; align-items: center; gap: 10px;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .logo { width: 26px; height: 26px; background: var(--accent); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 12px; flex-shrink: 0; }
+  header h1 { font-size: 14px; font-weight: 600; }
+  header .sep { color: var(--border-strong); margin: 0 2px; }
+  header nav { margin-left: auto; display: flex; gap: 4px; }
+  header nav a { font-size: 13px; padding: 5px 10px; border-radius: var(--radius); color: var(--text-secondary); text-decoration: none; transition: background 0.12s, color 0.12s; }
+  header nav a:hover { background: var(--surface-2); color: var(--text-primary); }
+  header nav a.active { background: var(--accent-bg); color: var(--accent-text); font-weight: 500; }
+
+  /* ── LAYOUT ── */
+  .layout { display: flex; flex: 1; max-width: 1280px; margin: 0 auto; width: 100%; }
+  .sidebar { width: 310px; flex-shrink: 0; padding: 1.25rem; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 1.1rem; overflow-y: auto; }
+  .main { flex: 1; padding: 1.5rem 2rem; overflow-y: auto; }
+
+  /* ── FORM ── */
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
+  select, input[type="text"], textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 7px 10px; font-size: 13px;
+    font-family: var(--font-ui); color: var(--text-primary); outline: none;
+    transition: border-color .15s;
+  }
+  select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239c9890' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; padding-right: 28px; appearance: none; cursor: pointer; }
+  select:focus, input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px 3px 9px; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 100px; font-size: 12px; color: var(--accent-text); }
+  .chip button { background: none; border: none; cursor: pointer; padding: 0; line-height: 1; color: inherit; opacity: .6; font-size: 14px; }
+  .chip button:hover { opacity: 1; }
+
+  .tag-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag { padding: 4px 9px; border-radius: 100px; font-size: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); cursor: pointer; transition: all .12s; user-select: none; }
+  .tag:hover { border-color: var(--accent); color: var(--accent-text); }
+  .tag.on { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent-text); font-weight: 500; }
+
+  .divider { height: 1px; background: var(--border); }
+
+  .btn-primary { width: 100%; padding: 9px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 13px; font-weight: 600; font-family: var(--font-ui); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: opacity .15s, transform .1s; }
+  .btn-primary:hover:not(:disabled) { opacity: .88; }
+  .btn-primary:active:not(:disabled) { transform: scale(.98); }
+  .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+
+  .btn-secondary { width: 100%; padding: 8px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-family: var(--font-ui); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background .12s, border-color .12s; }
+  .btn-secondary:hover { background: var(--surface-2); border-color: var(--border-strong); }
+  .btn-secondary:disabled { opacity: .45; cursor: not-allowed; }
+
+  .btn-mini { padding: 3px 8px; font-size: 11px; border-radius: 100px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); cursor: pointer; }
+  .btn-mini:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+  /* ── FILE DROP ── */
+  .drop-zone {
+    border: 1.5px dashed var(--border-strong); border-radius: 10px; padding: 1.1rem .8rem;
+    text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+    font-size: 12.5px; color: var(--text-secondary);
+  }
+  .drop-zone:hover, .drop-zone.drag { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-text); }
+  .drop-zone .fname { font-weight: 600; color: var(--text-primary); margin-top: 4px; word-break: break-all; }
+  .drop-zone input { display: none; }
+
+  /* ── STATUS PANEL ── */
+  .status-panel { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .status-panel.show { display: block; }
+  .status-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+  .pulse { display: flex; gap: 3px; }
+  .pulse span { width: 5px; height: 5px; background: var(--accent); border-radius: 50%; animation: pulse 1.2s ease-in-out infinite; }
+  .pulse span:nth-child(2) { animation-delay: .2s; }
+  .pulse span:nth-child(3) { animation-delay: .4s; }
+  @keyframes pulse { 0%,80%,100%{opacity:.3;transform:scale(.8)} 40%{opacity:1;transform:scale(1)} }
+
+  .progress-track { height: 6px; background: var(--surface-2); border-radius: 100px; margin-top: 10px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width .25s ease; }
+  .progress-label { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+
+  /* ── ERROR ── */
+  .error-box { background: var(--danger-bg); border: 1px solid #e8b4b0; border-radius: var(--radius); padding: 10px 14px; font-size: 13px; color: var(--danger); margin-bottom: 1rem; }
+
+  /* ── EMPTY ── */
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 420px; gap: 10px; color: var(--text-muted); text-align: center; }
+  .empty-icon { width: 52px; height: 52px; border: 2px dashed var(--border-strong); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .empty p { font-size: 13px; max-width: 260px; line-height: 1.55; }
+
+  /* ── EXTRACTED QUESTION LIST ── */
+  .list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .9rem; }
+  .list-header h2 { font-size: 15px; font-weight: 700; }
+  .list-header .count { font-size: 12px; color: var(--text-muted); }
+  .list-actions { display: flex; gap: 6px; }
+
+  .q-row {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: .7rem .9rem; margin-bottom: .55rem; display: flex; gap: 10px; align-items: flex-start;
+  }
+  .q-row input[type="checkbox"] { margin-top: 3px; accent-color: var(--accent); cursor: pointer; }
+  .q-row-body { flex: 1; }
+  .q-row-text { font-size: 13.5px; line-height: 1.5; outline: none; }
+  .q-row-text:focus { background: var(--accent-bg); border-radius: 4px; }
+  .q-type-badge { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 100px; margin-bottom: 5px; background: var(--surface-2); color: var(--text-secondary); }
+  .q-type-badge.mcq { background: #eaf2ff; color: #2f6fce; }
+  .q-type-badge.true_false { background: #fdf3e2; color: #b3792a; }
+  .q-type-badge.short { background: var(--accent-bg); color: var(--accent-text); }
+  .q-type-badge.long { background: #f3ebfb; color: #7c4bab; }
+  .q-type-badge.fill { background: #fce8f0; color: #c23b74; }
+
+  /* ── ANSWERED RESULT CARDS ── */
+  .result-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.3rem; margin-bottom: 1rem; }
+  .result-card.pending { opacity: .6; }
+  .result-q { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; line-height: 1.5; }
+  .result-q .qnum { color: var(--accent-text); margin-right: 4px; }
+  .result-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .conf-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 100px; font-size: 11.5px; font-weight: 600; }
+  .src-chip { font-size: 11px; padding: 3px 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 100px; color: var(--text-secondary); }
+  .result-answer { font-size: 13.5px; line-height: 1.7; color: var(--text-primary); }
+  .result-answer strong { color: var(--text-primary); }
+  .result-answer code { font-family: 'JetBrains Mono', monospace; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: .92em; }
+  .result-answer p { margin-bottom: 6px; }
+  .result-images { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .result-images img { width: 90px; height: 90px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+  .cursor-blink { display: inline-block; width: 2px; height: 13px; background: var(--accent); vertical-align: text-bottom; animation: blink 1s step-start infinite; margin-left: 1px; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .summary-bar { display: flex; align-items: center; justify-content: space-between; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 10px; padding: .8rem 1.1rem; margin-bottom: 1rem; font-size: 13px; color: var(--accent-text); }
+
+  /* ── SCORE BAR (persists at top of results, updates live) ── */
+  .score-bar { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .75rem 1.1rem; margin-bottom: 1rem; font-size: 13px; color: var(--text-secondary); position: sticky; top: 0; z-index: 5; }
+  .score-bar b { color: var(--accent-text); }
+
+  /* ── YOUR ANSWER (self-check panel under each generated answer) ── */
+  .your-answer { margin-top: 12px; padding-top: 11px; border-top: 1px dashed var(--border); }
+  .your-answer-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 7px; }
+
+  .opt-btn-row { display: flex; flex-direction: column; gap: 6px; }
+  .opt-btn { display: flex; align-items: center; gap: 9px; text-align: left; padding: 7px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 13px; color: var(--text-primary); cursor: pointer; font-family: var(--font-ui); transition: all .12s; }
+  .opt-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-bg); }
+  .opt-btn:disabled { cursor: default; }
+  .opt-letter { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border-strong); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; color: var(--text-secondary); }
+  .opt-btn.chosen { border-color: var(--border-strong); }
+  .opt-btn.correct { border-color: #22c55e; background: #eafaf0; color: #178a4c; }
+  .opt-btn.correct .opt-letter { border-color: #22c55e; color: #178a4c; }
+  .opt-btn.incorrect { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+  .opt-btn.incorrect .opt-letter { border-color: var(--danger); color: var(--danger); }
+
+  .tf-btn-row { display: flex; gap: 8px; }
+  .tf-btn { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 13px; font-weight: 600; color: var(--text-primary); cursor: pointer; font-family: var(--font-ui); transition: all .12s; }
+  .tf-btn:hover:not(:disabled) { border-color: var(--accent); }
+  .tf-btn:disabled { cursor: default; }
+  .tf-btn.correct { border-color: #22c55e; background: #eafaf0; color: #178a4c; }
+  .tf-btn.incorrect { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+
+  .grade-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+  .your-answer textarea { min-height: 56px; margin-bottom: 7px; }
+  .self-grade-row { display: flex; gap: 8px; }
+  .self-btn { flex: 1; padding: 7px; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); font-family: var(--font-ui); transition: all .12s; }
+  .self-btn:hover:not(:disabled) { border-color: var(--border-strong); }
+  .self-btn:disabled { cursor: default; }
+  .self-btn.chosen.right { border-color: #22c55e; background: #eafaf0; color: #178a4c; }
+  .self-btn.chosen.wrong { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+
+  @media print {
+    header, .sidebar, .status-panel, .summary-bar, .score-bar, .your-answer, #print-btn, .q-row input[type="checkbox"] { display: none !important; }
+    .main { padding: 0; }
+    .result-card { border: none; border-bottom: 1px solid #ccc; border-radius: 0; page-break-inside: avoid; }
+    body { background: white; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Q</div>
+  <h1>CBSE RAG</h1>
+  <span class="sep">/</span>
+  <span style="font-size:13px;color:var(--text-secondary)">Quiz Solver</span>
+  <nav>
+    <a href="/">Chat</a>
+    <a href="/upload">Upload</a>
+    <a href="/quiz" class="active">Quiz</a>
+    <a href="/worksheet">Worksheet</a>
+  </nav>
+</header>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <div class="field">
+      <label>Class</label>
+      <select id="class-sel">
+        <option value="">Loading…</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Subject</label>
+      <select id="subject-sel" disabled>
+        <option value="">Select class first</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Question paper (PDF)</label>
+      <div class="drop-zone" id="drop-zone">
+        <div id="drop-label">📄 Click or drop a PDF here</div>
+        <div class="fname" id="fname"></div>
+        <input type="file" id="file-input" accept="application/pdf" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Topics <span style="text-transform:none;font-weight:400;color:var(--text-muted)">(optional)</span></label>
+      <input type="text" id="topic-input" placeholder="e.g. Reflection of Light — Enter to add" />
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="btn-primary" id="extract-btn" onclick="extractQuestions()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 2h6l3 3v15a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5l3-3Z"/><path d="M9 12h6M9 16h6"/></svg>
+      Extract questions
+    </button>
+
+    <button class="btn-primary" id="answer-btn" onclick="answerAll()" style="display:none">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      Answer selected questions
+    </button>
+
+    <button class="btn-secondary" id="print-btn" onclick="window.print()" style="display:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print answers
+    </button>
+
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- Status panel -->
+    <div class="status-panel" id="status-panel">
+      <div class="status-row">
+        <div class="pulse"><span></span><span></span><span></span></div>
+        <span id="status-msg">Extracting questions…</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-label" id="progress-label"></div>
+    </div>
+
+    <!-- Error -->
+    <div class="error-box" id="err-box" style="display:none"></div>
+
+    <!-- Empty -->
+    <div class="empty" id="empty">
+      <div class="empty-icon">🧾</div>
+      <p>Pick a class &amp; subject, upload a question paper PDF, then extract and answer every question straight from the NCERT textbooks.</p>
+    </div>
+
+    <!-- Extracted question list (review/select before answering) -->
+    <div id="list-out"></div>
+
+    <!-- Answered results -->
+    <div id="results-out"></div>
+
+  </main>
+</div>
+
+<script>
+const API = '';  // same-origin — FastAPI serves this file at /quiz
+
+let extracted = [];   // [{text, type}] from /api/extract-questions
+let fileToUse = null;
+let scoreState = { correct: 0, total: 0 };   // graded so far, updated as you self-check each answer
+let topics = [];       // optional teacher-supplied topic hints, widen retrieval alongside each question
+
+/* ── file drop zone ── */
+const dropZone   = document.getElementById('drop-zone');
+const fileInput  = document.getElementById('file-input');
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag');
+  if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) setFile(fileInput.files[0]); });
+function setFile(f) {
+  if (!f.name.toLowerCase().endsWith('.pdf')) { showError('Only PDF files are accepted.'); return; }
+  fileToUse = f;
+  document.getElementById('drop-label').textContent = '📄 Selected:';
+  document.getElementById('fname').textContent = f.name;
+}
+
+/* ── topics (optional) ── */
+const topicInput = document.getElementById('topic-input');
+topicInput.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ',') && topicInput.value.trim()) {
+    e.preventDefault(); addTopic(topicInput.value.trim()); topicInput.value = '';
+  }
+});
+topicInput.addEventListener('blur', () => {
+  if (topicInput.value.trim()) { addTopic(topicInput.value.trim()); topicInput.value = ''; }
+});
+function addTopic(t) {
+  if (!topics.includes(t)) { topics.push(t); renderTopicChips(); }
+}
+function removeTopic(t) {
+  const i = topics.indexOf(t); if (i > -1) { topics.splice(i, 1); renderTopicChips(); }
+}
+function renderTopicChips() {
+  document.getElementById('chips').innerHTML = topics.map(t =>
+    `<span class="chip">${escapeHtml(t)}<button onclick="removeTopic('${t.replace(/'/g, "\\'")}')">×</button></span>`
+  ).join('');
+}
+
+/* Answer style is no longer a manual sidebar choice -- it's derived
+   straight from each extracted question's type, since that already
+   tells us the right response shape:
+     mcq        -> "mcq"        (state + justify the option)
+     true_false -> "true_false" (state TRUE/FALSE + justify)
+     short      -> "brief"      (a few sentences is enough)
+     fill       -> "one_line"   (just the missing word/phrase)
+     long       -> "detailed"   (full step-by-step / essay treatment) */
+function answerModeFor(qtype) {
+  return { mcq: 'mcq', true_false: 'true_false', short: 'brief', fill: 'one_line', long: 'detailed' }[qtype] || 'detailed';
+}
+
+/* ── load classes / subjects from API ── */
+async function loadClasses() {
+  try {
+    const r = await fetch(`${API}/api/classes`);
+    const d = await r.json();
+    const sel = document.getElementById('class-sel');
+    sel.innerHTML = '<option value="">Select class…</option>' +
+      d.classes.map(c => `<option value="${c.id}">${c.label}</option>`).join('');
+    sel.addEventListener('change', loadSubjects);
+  } catch (e) {
+    document.getElementById('class-sel').innerHTML = '<option value="">API unavailable</option>';
+  }
+}
+async function loadSubjects() {
+  const cls = document.getElementById('class-sel').value;
+  const sel = document.getElementById('subject-sel');
+  if (!cls) { sel.innerHTML = '<option value="">Select class first</option>'; sel.disabled = true; return; }
+  sel.innerHTML = '<option value="">Loading…</option>'; sel.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/subjects/${cls}`);
+    const d = await r.json();
+    sel.innerHTML = '<option value="">Select subject…</option>' +
+      d.subjects.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+    sel.disabled = false;
+  } catch (e) {
+    sel.innerHTML = '<option value="">Error loading subjects</option>';
+  }
+}
+loadClasses();
+
+/* ── step 1: extract questions from the uploaded PDF ── */
+async function extractQuestions() {
+  const cls     = document.getElementById('class-sel').value;
+  const subject = document.getElementById('subject-sel').value;
+  if (!cls)      { highlight(document.getElementById('class-sel')); return; }
+  if (!subject)  { highlight(document.getElementById('subject-sel')); return; }
+  if (!fileToUse) { highlight(dropZone); return; }
+
+  const btn = document.getElementById('extract-btn');
+  btn.disabled = true;
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('err-box').style.display = 'none';
+  document.getElementById('list-out').innerHTML = '';
+  document.getElementById('results-out').innerHTML = '';
+  document.getElementById('answer-btn').style.display = 'none';
+  document.getElementById('print-btn').style.display = 'none';
+
+  const sp = document.getElementById('status-panel');
+  sp.classList.add('show');
+  setStatus('Reading PDF and extracting questions…');
+  setProgress(0, '');
+
+  const form = new FormData();
+  form.append('file', fileToUse);
+  form.append('class_name', cls);
+  form.append('subject', subject);
+
+  try {
+    const res = await fetch(`${API}/api/extract-questions`, { method: 'POST', body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || 'Extraction failed');
+    }
+    const data = await res.json();
+    extracted = data.questions || [];
+    sp.classList.remove('show');
+
+    if (extracted.length === 0) {
+      showError('No questions could be extracted from this PDF. Try a cleaner scan or a text-based PDF.');
+    } else {
+      renderQuestionList();
+      document.getElementById('answer-btn').style.display = 'flex';
+    }
+  } catch (e) {
+    sp.classList.remove('show');
+    showError(`Extraction error: ${e.message}. Is the FastAPI server running?`);
+  }
+  btn.disabled = false;
+}
+
+/* ── render extracted list for review/selection before answering ── */
+function renderQuestionList() {
+  const rows = extracted.map((q, i) => `
+    <div class="q-row" data-i="${i}">
+      <input type="checkbox" checked onchange="extracted[${i}].selected = this.checked" />
+      <div class="q-row-body">
+        <span class="q-type-badge ${q.type}">${typeLabel(q.type)}</span>
+        <div class="q-row-text" contenteditable="true"
+             oninput="extracted[${i}].text = this.textContent">${escapeHtml(q.text)}</div>
+      </div>
+    </div>`).join('');
+
+  extracted.forEach(q => q.selected = true);
+
+  document.getElementById('list-out').innerHTML = `
+    <div class="list-header">
+      <h2>Extracted questions</h2>
+      <div class="list-actions">
+        <span class="count">${extracted.length} found</span>
+        <button class="btn-mini" onclick="toggleAll(true)">Select all</button>
+        <button class="btn-mini" onclick="toggleAll(false)">Deselect all</button>
+      </div>
+    </div>
+    ${rows}`;
+}
+function toggleAll(state) {
+  extracted.forEach(q => q.selected = state);
+  document.querySelectorAll('#list-out .q-row input[type="checkbox"]').forEach(cb => cb.checked = state);
+}
+function typeLabel(t) {
+  return { mcq: 'MCQ', true_false: 'True/False', short: 'Short', long: 'Long', fill: 'Fill blank' }[t] || 'Question';
+}
+
+/* ── step 2: answer every selected question, one at a time, via /api/ask ── */
+async function answerAll() {
+  const selected = extracted.filter(q => q.selected && q.text.trim());
+  if (selected.length === 0) { alert('Select at least one question to answer.'); return; }
+  if (topicInput.value.trim()) { addTopic(topicInput.value.trim()); topicInput.value = ''; }
+
+  const cls     = document.getElementById('class-sel').value;
+  const subject = document.getElementById('subject-sel').value;
+
+  const btn = document.getElementById('answer-btn');
+  btn.disabled = true;
+  btn.innerHTML = `<div class="pulse"><span></span><span></span><span></span></div> Answering…`;
+
+  document.getElementById('err-box').style.display = 'none';
+  document.getElementById('print-btn').style.display = 'none';
+
+  const sp = document.getElementById('status-panel');
+  sp.classList.add('show');
+
+  // Reset the live score tracker and give it a persistent home at the
+  // top of the results list -- it updates as answers finish streaming
+  // AND as you grade yourself against each one below.
+  scoreState = { correct: 0, total: 0 };
+  document.getElementById('results-out').innerHTML =
+    `<div class="score-bar" id="score-bar">
+       <span id="score-bar-progress">🧑‍🎓 0 of ${selected.length} answered</span>
+       <span id="score-bar-score"></span>
+     </div>`;
+
+  let solved = 0;
+  for (let i = 0; i < selected.length; i++) {
+    const q = selected[i];
+    const answerMode = answerModeFor(q.type);
+
+    setStatus(`Answering question ${i + 1} of ${selected.length}…`);
+    setProgress(Math.round((i / selected.length) * 100), `${i} of ${selected.length} answered`);
+
+    const card = makeResultCard(i + 1, q);
+    document.getElementById('results-out').appendChild(card);
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    try {
+      const answerText = await streamAnswer({
+        question: q.text,
+        class_name: cls,
+        subject: subject,
+        max_context: 2000,
+        answer_mode: answerMode,
+        topics: topics
+      }, card);
+      solved++;
+      renderYourAnswer(card, q, answerText);
+    } catch (e) {
+      card.querySelector('.result-answer').innerHTML =
+        `<span style="color:var(--danger)">⚠ ${escapeHtml(e.message)}</span>`;
+      card.classList.remove('pending');
+    }
+    document.getElementById('score-bar-progress').textContent = `🧑‍🎓 ${i + 1} of ${selected.length} answered`;
+  }
+
+  setProgress(100, `${solved} of ${selected.length} answered`);
+  sp.classList.remove('show');
+
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Answer selected questions`;
+  document.getElementById('print-btn').style.display = 'flex';
+}
+
+/* ── build the pending card shell for one question ── */
+function makeResultCard(num, q) {
+  const div = document.createElement('div');
+  div.className = 'result-card pending';
+  div.innerHTML = `
+    <div class="result-q"><span class="qnum">Q${num}.</span>${escapeHtml(q.text)}</div>
+    <div class="result-meta" data-meta></div>
+    <div class="result-answer" data-answer><span class="cursor-blink"></span></div>
+    <div class="result-images" data-images></div>`;
+  return div;
+}
+
+/* ── open the SSE stream for one question and fill the card as tokens arrive ── */
+async function streamAnswer(body, card) {
+  const metaEl   = card.querySelector('[data-meta]');
+  const answerEl = card.querySelector('[data-answer]');
+  const imagesEl = card.querySelector('[data-images]');
+  let answerText = '';
+
+  const res = await fetch(`${API}/api/ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok || !res.body) throw new Error('Could not reach /api/ask');
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      let ev;
+      try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+
+      if (ev.type === 'error') throw new Error(ev.message);
+
+      if (ev.type === 'confidence') {
+        metaEl.innerHTML =
+          `<span class="conf-badge" style="background:${hexAlpha(ev.color, .15)};color:${ev.color};border:1px solid ${hexAlpha(ev.color, .3)}">
+             ${ev.score}% — ${ev.label}
+           </span>` + metaEl.innerHTML;
+      }
+      if (ev.type === 'sources') {
+        const chips = ev.data.slice(0, 4).map(s =>
+          `<span class="src-chip">${basename(s.file)} p.${s.page}</span>`).join('');
+        metaEl.innerHTML += chips;
+      }
+      if (ev.type === 'token') {
+        answerText += ev.data;
+        answerEl.innerHTML = mdToHtml(answerText) + '<span class="cursor-blink"></span>';
+      }
+      if (ev.type === 'images' && ev.data.length) {
+        imagesEl.innerHTML = ev.data.map(img =>
+          `<a href="${img.url}" target="_blank"><img src="${img.url}" alt="p.${img.page}" title="${basename(img.source)} p.${img.page}"></a>`).join('');
+      }
+      if (ev.type === 'done') {
+        answerEl.innerHTML = mdToHtml(answerText) || '<em>(No answer returned.)</em>';
+        card.classList.remove('pending');
+      }
+    }
+  }
+  answerEl.innerHTML = mdToHtml(answerText) || '<em>(No answer returned.)</em>';
+  card.classList.remove('pending');
+  return answerText;
+}
+
+/* ── tiny markdown → HTML (bold, code, line breaks) — no external libs ── */
+function mdToHtml(s) {
+  let h = escapeHtml(s);
+  h = h.replace(/```([\s\S]*?)```/g, (_, c) => `<pre><code>${c.trim()}</code></pre>`);
+  h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+  h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  h = h.split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+  return h;
+}
+
+/* ── "Your answer" selector — lets you pick/enter your own answer under
+   each generated explanation and self-check it against what the model
+   said, without any extra LLM call. ── */
+function renderYourAnswer(card, q, answerText) {
+  const wrap = document.createElement('div');
+  wrap.className = 'your-answer';
+  wrap.innerHTML = `<div class="your-answer-label">Your answer</div>`;
+
+  if (q.type === 'mcq') {
+    const opts = parseMcqOptions(q.text);
+    const correctLetter = extractMcqLetter(answerText);
+    const list = opts.length >= 2 ? opts : ['A','B','C','D'].map(l => ({ letter: l, text: '' }));
+
+    const row = document.createElement('div');
+    row.className = 'opt-btn-row';
+    list.forEach(o => {
+      const b = document.createElement('button');
+      b.className = 'opt-btn';
+      b.innerHTML = `<span class="opt-letter">${o.letter}</span><span>${escapeHtml(o.text)}</span>`;
+      b.onclick = () => gradeChoice(row, b, o.letter, correctLetter);
+      row.appendChild(b);
+    });
+    wrap.appendChild(row);
+    if (!correctLetter) wrap.appendChild(gradeNote("Couldn't auto-detect the correct option from the answer above — compare manually."));
+
+  } else if (q.type === 'true_false') {
+    const correct = extractTrueFalse(answerText);
+    const row = document.createElement('div');
+    row.className = 'tf-btn-row';
+    ['TRUE', 'FALSE'].forEach(v => {
+      const b = document.createElement('button');
+      b.className = 'tf-btn';
+      b.textContent = v === 'TRUE' ? 'True' : 'False';
+      b.onclick = () => gradeChoice(row, b, v, correct);
+      row.appendChild(b);
+    });
+    wrap.appendChild(row);
+    if (!correct) wrap.appendChild(gradeNote("Couldn't auto-detect True/False from the answer above — compare manually."));
+
+  } else {
+    // short / long / fill: no reliable single "correct token" to parse,
+    // so let the student write their own attempt and self-mark it
+    // instead of burning another LLM call to auto-grade free text.
+    const ta = document.createElement('textarea');
+    ta.placeholder = 'Write your own answer here to compare against the explanation above…';
+    wrap.appendChild(ta);
+
+    const row = document.createElement('div');
+    row.className = 'self-grade-row';
+    const rightBtn = document.createElement('button');
+    rightBtn.className = 'self-btn'; rightBtn.textContent = '✅ I got it right';
+    const wrongBtn = document.createElement('button');
+    wrongBtn.className = 'self-btn'; wrongBtn.textContent = '❌ I need to review';
+    rightBtn.onclick = () => selfGrade(row, rightBtn, wrongBtn, true);
+    wrongBtn.onclick = () => selfGrade(row, rightBtn, wrongBtn, false);
+    row.appendChild(rightBtn); row.appendChild(wrongBtn);
+    wrap.appendChild(row);
+  }
+
+  card.appendChild(wrap);
+}
+
+function gradeNote(text) {
+  const d = document.createElement('div');
+  d.className = 'grade-note';
+  d.textContent = text;
+  return d;
+}
+
+/* One grade per question -- clicking again after grading is a no-op. */
+function gradeChoice(row, btn, letter, correctLetter) {
+  if (row.dataset.graded) return;
+  row.dataset.graded = '1';
+  [...row.children].forEach(b => b.disabled = true);
+  if (!correctLetter) { btn.classList.add('chosen'); return; }
+
+  const isRight = letter === correctLetter;
+  btn.classList.add(isRight ? 'correct' : 'incorrect');
+  if (!isRight) {
+    [...row.children].forEach(b => { if (letterOf(b) === correctLetter) b.classList.add('correct'); });
+  }
+  scoreState.total++;
+  if (isRight) scoreState.correct++;
+  updateScoreBadge();
+}
+
+function selfGrade(row, rightBtn, wrongBtn, isRight) {
+  if (row.dataset.graded) return;
+  row.dataset.graded = '1';
+  rightBtn.disabled = true; wrongBtn.disabled = true;
+  (isRight ? rightBtn : wrongBtn).classList.add('chosen', isRight ? 'right' : 'wrong');
+  scoreState.total++;
+  if (isRight) scoreState.correct++;
+  updateScoreBadge();
+}
+
+function updateScoreBadge() {
+  const el = document.getElementById('score-bar-score');
+  if (el) el.innerHTML = scoreState.total
+    ? `Score: <b>${scoreState.correct} / ${scoreState.total}</b> graded`
+    : '';
+}
+
+function letterOf(el) {
+  const ol = el.querySelector && el.querySelector('.opt-letter');
+  return (ol ? ol.textContent : el.textContent).trim().toUpperCase();
+}
+
+/* Best-effort parse of "(a) foo (b) bar (c) baz (d) qux" / "A. foo B. bar"
+   style option lists embedded in the extracted question text. Falls back
+   to plain A–D letter buttons in renderYourAnswer() if this finds < 2. */
+function parseMcqOptions(qtext) {
+  const re = /\(?\b([A-Da-d])\)?[\.\)]\s*([^()]+?)(?=(?:\(?\b[A-Da-d]\)?[\.\)])|$)/g;
+  const opts = [];
+  let m;
+  while ((m = re.exec(qtext)) !== null) {
+    const letter = m[1].toUpperCase();
+    const text = m[2].trim().replace(/[,;]+$/, '');
+    if (text) opts.push({ letter, text });
+  }
+  const seen = new Set();
+  return opts.filter(o => (seen.has(o.letter) ? false : seen.add(o.letter))).slice(0, 4);
+}
+
+/* Looks for how the model stated its MCQ answer, e.g. "correct answer is (B)". */
+function extractMcqLetter(text) {
+  const m = text.match(/correct answer is\s*\(?([A-Da-d])\)?/i)
+         || text.match(/answer\s*[:\-]?\s*\(?([A-Da-d])\)\)?/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
+/* Looks for how the model stated its True/False verdict. */
+function extractTrueFalse(text) {
+  const m = text.match(/\b(TRUE|FALSE)\b/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
+/* ── helpers ── */
+function setStatus(msg) { document.getElementById('status-msg').textContent = msg; }
+function setProgress(pct, label) {
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = label;
+}
+function showError(msg) {
+  const b = document.getElementById('err-box');
+  b.textContent = msg; b.style.display = 'block';
+}
+function highlight(el) {
+  el.style.borderColor = '#c0392b';
+  el.focus();
+  setTimeout(() => el.style.borderColor = '', 1500);
+}
+function basename(p) { return (p || '').split('/').pop().split('\\').pop(); }
+function escapeHtml(s) {
+  return (s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+function hexAlpha(hex, a) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+</script>
+</body>
+</html>
