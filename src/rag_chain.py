@@ -8,33 +8,196 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from src.retriever import CBSERetriever
 from src.formatter import format_answer
+from src.latex_utils import looks_like_latex, parse_latex_expr, parse_latex_equation
 from rich.console import Console
-import sympy
+
+# sympy is optional: if it's unavailable, the `calculate` tool is simply not
+# bound to the LLM (see CBSERagChain.__init__) and the model falls back to
+# doing its own arithmetic in-line, rather than the app failing to start.
+# Precise arithmetic via sympy is still strongly preferred when available --
+# this is a graceful-degradation path, not the recommended normal state.
+try:
+    import sympy
+    SYMPY_AVAILABLE = True
+except ImportError:
+    sympy = None
+    SYMPY_AVAILABLE = False
 
 load_dotenv()
 console = Console()
 
+if not SYMPY_AVAILABLE:
+    console.print(
+        "[yellow]⚠ sympy not installed — the `calculate` tool is disabled. "
+        "The LLM will compute arithmetic itself (less reliable for exact "
+        "values). Run `pip install sympy` to re-enable it.[/yellow]"
+    )
+
+
+def _sympy_eval(expression: str):
+    """
+    Evaluate a sympy expression OR a short multi-line sympy script (imports,
+    variable assignments, then a final expression) and return the value of
+    the last statement.
+
+    Why both paths: the LLM sometimes writes step-by-step working (assign
+    intermediate variables, then combine them) rather than one inline
+    expression, which plain `sympy.sympify()` cannot parse at all -- that
+    mismatch was the actual cause of `calculate` erroring out on valid,
+    well-formed working. `sympify` is tried first since it's the common
+    case and keeps the fast/simple path fast; multi-statement exec is the
+    fallback only when that fails.
+
+    Sandboxing: exec runs with __builtins__ stripped and only `sympy` (plus
+    Rational/symbols/etc. pulled to top-level for convenience) in scope --
+    no file, network, or OS access is reachable from this namespace.
+    """
+    try:
+        return sympy.sympify(expression, evaluate=True)
+    except Exception:
+        pass  # fall through to multi-statement exec below
+
+    import ast
+
+    tree = ast.parse(expression, mode="exec")
+    if not tree.body:
+        raise ValueError("empty expression")
+
+    # sympy only. Earlier this allowlisted fractions/decimal/math/itertools/
+    # statistics too, since production logs showed the model reaching for
+    # `fractions.Fraction` -- but sympy.Rational already covers that exact
+    # same use case AND composes correctly with irrational values (sqrt(6),
+    # sqrt(2), etc.) in the same expression, which fractions.Fraction can't
+    # do at all. Trig identity questions routinely mix both in one
+    # computation, so steering the model to one consistent library (via the
+    # `calculate` docstring below) is the real fix -- not widening the
+    # sandbox to chase whichever stdlib module the model tries next.
+    _ALLOWED_IMPORT_MODULES = {"sympy"}
+
+    def _restricted_import(name, *args, **kwargs):
+        base_module = name.split(".")[0]
+        if base_module in _ALLOWED_IMPORT_MODULES:
+            return __import__(name, *args, **kwargs)
+        raise ImportError(f"import of '{name}' is not permitted in calculate()")
+
+    safe_globals = {
+        "__builtins__": {"__import__": _restricted_import},
+        "sympy": sympy,
+        **{name: getattr(sympy, name) for name in dir(sympy) if not name.startswith("_")},
+    }
+    safe_locals: dict = {}
+
+    *stmts, last = tree.body
+    if stmts:
+        exec(compile(ast.Module(body=stmts, type_ignores=[]), "<calc>", "exec"),
+             safe_globals, safe_locals)
+
+    if isinstance(last, ast.Expr):
+        # Final line is a bare expression (e.g. `result_i`) -- evaluate it
+        # for its value rather than executing it as a statement.
+        return eval(compile(ast.Expression(body=last.value), "<calc>", "eval"),
+                    safe_globals, safe_locals)
+    else:
+        # Final line is itself an assignment/import/etc -- run it, then
+        # report the last assigned variable if there is one, else None.
+        exec(compile(ast.Module(body=[last], type_ignores=[]), "<calc>", "exec"),
+             safe_globals, safe_locals)
+        if isinstance(last, ast.Assign) and isinstance(last.targets[0], ast.Name):
+            return safe_locals.get(last.targets[0].id)
+        return None
+
 
 @tool
 def calculate(expression: str) -> str:
-    """
-    Evaluate a math expression EXACTLY using sympy and return the precise
-    result. ALWAYS use this tool for any arithmetic, counting, algebra, or
-    numeric comparison instead of computing it mentally -- including counts
-    of numbers between two values, squares/cubes, differences, fractions,
-    percentages, LCM/HCF, and simplification.
+    r"""
+    Evaluate a math expression or short sympy working EXACTLY and return the
+    precise result. ALWAYS use this tool for any arithmetic, counting,
+    algebra, or numeric comparison instead of computing it mentally --
+    including counts of numbers between two values, squares/cubes,
+    differences, fractions, percentages, LCM/HCF, and simplification.
 
-    Examples:
-      "100**2 - 99**2 - 1"   -> counting integers strictly between 99^2 and 100^2
-      "sympy.gcd(24, 36)"    -> HCF
-      "sympy.lcm(24, 36)"    -> LCM
-      "sympy.Rational(3,4) + sympy.Rational(1,6)"  -> fraction arithmetic
+    IMPORTANT for multi-part questions (i, ii, iii...): compute ALL parts in
+    ONE call, not one call per part. Each separate call is a full round-trip
+    to the model provider, and unnecessary round-trips are the main cause of
+    slow/stalled responses on multi-part questions. Return a tuple, e.g.:
+      "from sympy import Rational
+      sinB = Rational(21,29); cosB = Rational(20,29)
+      sinC = cosB; cosC = sinB
+      part_i  = sinB*cosC + cosB*sinC
+      part_ii = cosB*cosC + sinB*sinC
+      (part_i, part_ii)"
+    -- one call, both answers back at once.
 
-    Input must be a valid Python/sympy expression string.
+    IMPORTANT for "verify this identity" questions: the LaTeX equation input
+    above (pass the full identity including "=") handles this directly in
+    one call -- no need to manually derive values step by step first.
+
+    LATEX INPUT (usually easiest): you can pass an expression straight from
+    the question text, in LaTeX, exactly as written -- e.g.
+    "\frac{\cos A}{1-\tan A}+\frac{\sin A}{1-\cot A}" or, for an identity to
+    verify, the FULL equation including the "=":
+    "\frac{\cos A}{1-\tan A}+\frac{\sin A}{1-\cot A}=\cot A+\sin A" -- for an
+    equation, this returns simplify(LHS - RHS) directly (0 means the two
+    sides are equal, i.e. the identity holds; anything else means it
+    doesn't). This works for ANY question's expressions, not just
+    identities -- use it whenever it saves you from manually translating
+    LaTeX into Python syntax, since that translation step is itself a
+    common source of mistakes. Falls back automatically to the Python/sympy
+    syntax below if the input isn't LaTeX-shaped.
+
+    Only the `sympy` library is available inside this tool -- no other
+    imports work (e.g. `fractions`, `decimal`, `math` will error). Use
+    `sympy.Rational(a, b)` for exact fractions, NOT `fractions.Fraction` --
+    Rational does the same job and, unlike Fraction, composes correctly
+    with irrational values like sqrt(6) in the same expression, which is
+    essential for trig identities that mix both (e.g. verifying
+    sqrt(6)*tan(theta) = 2*sqrt(2)*sin(theta) exactly, not as a float
+    approximation that can mask a true identity as false or vice versa).
+
+    Accepts either:
+      - a single expression: "100**2 - 99**2 - 1", "sympy.gcd(24, 36)",
+        "sympy.Rational(3,4) + sympy.Rational(1,6)", "sympy.sqrt(6)/(2*sympy.sqrt(2))"
+      - OR a short multi-line script with imports/assignments ending in the
+        value you want, e.g.:
+          "from sympy import Rational
+          a = Rational(4,3)
+          b = Rational(12,5)
+          (a + b) / (1 - a*b)"
+
+    If this tool returns an ERROR, do not retry the same expression in the
+    same broken form more than once -- rephrase as a single self-contained
+    sympy expression instead, or if it keeps failing, proceed with careful
+    manual calculation and clearly show your working rather than looping.
     """
+    if not SYMPY_AVAILABLE:
+        return (
+            "ERROR: sympy is not installed on this server, so this tool is "
+            "unavailable. Compute this yourself, showing careful step-by-step "
+            "working, and double-check the arithmetic before giving the final answer."
+        )
     try:
-        result = sympy.sympify(expression, evaluate=True)
+        if looks_like_latex(expression):
+            # Generic LaTeX path: works for whatever expression the LLM
+            # pastes in, for any question type -- not tied to any specific
+            # phrasing or problem pattern. If it's an equation (has '='),
+            # return lhs-rhs simplified (0 means the two sides are equal,
+            # which directly answers "verify this identity"-style
+            # questions too, without any question-specific code).
+            if "=" in expression:
+                lhs, rhs = parse_latex_equation(expression)
+                result = sympy.simplify(lhs - rhs)
+            else:
+                result = sympy.simplify(parse_latex_expr(expression))
+        else:
+            result = _sympy_eval(expression)
         return str(result)
+    except ImportError:
+        return (
+            "ERROR: LaTeX parsing isn't available on this server (missing "
+            "antlr4-python3-runtime). Rewrite this as plain Python/sympy "
+            "syntax instead, e.g. sympy.cos(A)/(1-sympy.tan(A)) rather than "
+            "\\frac{\\cos A}{1-\\tan A}."
+        )
     except Exception as e:
         return f"ERROR: could not evaluate '{expression}': {e}"
 
@@ -89,6 +252,46 @@ QUESTION: {question}
 ANSWER:"""
 )
 
+# ── Fallback prompt: used only when retrieval confidence is too low to
+# ground the answer (see is_context_sufficient() gate in ask()/api.py).
+# Forcing PROMPT_TEMPLATE's strict "ONLY use context" rules onto irrelevant
+# or empty context produces either a flat refusal or, worse, an LLM that
+# keeps reaching for the `calculate` tool trying to reconcile numbers that
+# aren't actually in the context -- which is what caused the retry-stall
+# seen on self-contained problems (e.g. "verify this trig identity") that
+# have no matching textbook passage to retrieve, by design. This prompt
+# instead lets the model answer from its own subject knowledge, clearly
+# labelled as such, bounded to the CBSE/NCERT syllabus for the given class.
+GENERAL_KNOWLEDGE_PROMPT = PromptTemplate(
+    input_variables=["question", "class_name", "subject", "language_instruction"],
+    template="""You are an expert CBSE tutor for {class_name}, subject: {subject}.
+
+{language_instruction}
+
+No sufficiently relevant passage was found in the NCERT textbook corpus for
+this question -- this is expected for self-contained problems (e.g. "verify
+this identity", "solve for x") that don't correspond to any specific
+textbook passage, not necessarily a sign something is wrong.
+
+Answer using your own subject knowledge instead, following these rules:
+- Stay strictly within the CBSE {class_name} syllabus for {subject} -- do not
+  use methods, notation, or content from a different grade level.
+- Show every step numbered (Step 1, Step 2...).
+- For ANY arithmetic, algebra, or numeric result, ALWAYS call the
+  `calculate` tool with a single self-contained expression and use its
+  returned result as the final number -- never compute it mentally. If a
+  calculate call errors, do not retry the same broken form; rephrase once
+  as a single expression, or otherwise proceed with careful manual working.
+- Use simple language for a school student.
+- End with a short summary or key takeaway.
+- Use markdown formatting (bold for key terms, code blocks for formulas/equations).
+
+---
+QUESTION: {question}
+
+ANSWER:"""
+)
+
 class CBSERagChain:
     def __init__(self):
         self.retriever = CBSERetriever()
@@ -99,30 +302,40 @@ class CBSERagChain:
         provider = os.getenv("LLM_PROVIDER", "deepseek").lower()
 
         if provider == "nvidia":
-            self.llm = ChatNVIDIA(
+            self.llm_raw = ChatNVIDIA(
                 model=os.getenv("LLM_MODEL", "nvidia/nemotron-3-ultra-550b-a55b"),
                 api_key=os.getenv("NVIDIA_API_KEY"),
                 temperature=float(os.getenv("LLM_TEMPERATURE", 0.1)),
                 top_p=float(os.getenv("LLM_TOP_P", 0.95)),
                 max_tokens=int(os.getenv("LLM_MAX_TOKENS", 16384)),
                 timeout=360,  # fail fast with a clear error instead of hanging
-            ).bind_tools([calculate])
+            )
 
         elif provider == "groq":
-            self.llm = ChatGroq(
+            self.llm_raw = ChatGroq(
                 model=os.getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
                 api_key=os.getenv("GROQ_API_KEY"),
                 temperature=0.1,
                 max_tokens=2048,
-            ).bind_tools([calculate])
+            )
 
         else:  # "deepseek" default — direct DeepSeek API
-            self.llm = ChatDeepSeek(
+            self.llm_raw = ChatDeepSeek(
                 model=os.getenv("LLM_MODEL", "deepseek-v4-flash"),
                 api_key=os.getenv("DEEPSEEK_API_KEY"),
                 temperature=0.1,
                 max_tokens=2048,
-            ).bind_tools([calculate])
+            )
+
+        # self.llm_raw has no tools bound -- used wherever a turn MUST return
+        # clean text/JSON with no possibility of a tool-call turn (structured
+        # extraction, e.g. concept_graph.py's extraction pass). self.llm is
+        # the tool-bound variant used for normal Q&A/worksheet generation
+        # where the `calculate` tool may legitimately be invoked mid-answer.
+        # Tool binding itself is skipped entirely when sympy isn't installed
+        # -- an unbound model can't be asked to call a tool that doesn't
+        # exist, so there's nothing to bind in that case.
+        self.llm = self.llm_raw.bind_tools([calculate]) if SYMPY_AVAILABLE else self.llm_raw
 
     async def astream_with_tools(self, messages, max_tool_iterations: int = 4):
         """
@@ -236,26 +449,26 @@ class CBSERagChain:
 
         # ── Anti-hallucination gate ─────────────────────────────────────────
         # If even the best-matching chunk has low confidence, the textbook
-        # likely doesn't cover this question well. Forcing the LLM to answer
-        # anyway is exactly what produces hallucinated, confident-sounding
-        # wrong answers. Refuse early instead.
-        if not self.retriever.is_context_sufficient(results, min_confidence=35.0):
-            overall = self.retriever.overall_confidence(results)
+        # likely doesn't cover this question well -- OR the question is
+        # simply self-contained (e.g. "verify this identity") and was never
+        # going to match a specific textbook passage in the first place.
+        # Rather than forcing the strict context-only prompt onto irrelevant
+        # chunks (which produces either a refusal or a confused answer that
+        # tries to reconcile numbers not actually present), fall back to
+        # letting the LLM answer from its own CBSE-syllabus knowledge,
+        # clearly labelled as ungrounded.
+        context_sufficient = self.retriever.is_context_sufficient(results, min_confidence=35.0)
+        overall = self.retriever.overall_confidence(results)
+
+        if not context_sufficient:
             console.print(
-                f"[red]⚠ Low confidence ({overall['score']}%) — the textbook context "
-                f"doesn't clearly cover this question.[/red]\n"
-                f"[yellow]Showing the closest matches found, but treat the answer "
-                f"with caution or rephrase the question.[/yellow]\n"
+                f"[yellow]⚠ Low confidence ({overall['score']}%) — no closely matching "
+                f"textbook passage found. Falling back to a general-knowledge answer "
+                f"(clearly labelled), instead of forcing a weak/irrelevant context.[/yellow]\n"
             )
-            # Still proceed, but the prompt's anti-hallucination rules + this
-            # warning together push toward an honest "not covered" answer
-            # rather than silent confident hallucination.
 
         # Extract doc objects for context building
         top_docs = self.retriever.get_top_docs(results)
-
-        # Compute overall confidence
-        overall = self.retriever.overall_confidence(results)
 
         # Limit context size — raised from 2000 to 6000 chars. The previous
         # 2000-char cap usually fit only 1-2 of the 5 re-ranked chunks, so
@@ -273,13 +486,21 @@ class CBSERagChain:
 
         context = "\n\n---\n\n".join(context_parts)
 
-        prompt = PROMPT_TEMPLATE.format(
-            context=context,
-            question=question,
-            class_name=class_name.replace("_", " ").title(),
-            subject=subject.replace("_", " ").title(),
-            language_instruction=language_instruction
-        )
+        if context_sufficient:
+            prompt = PROMPT_TEMPLATE.format(
+                context=context,
+                question=question,
+                class_name=class_name.replace("_", " ").title(),
+                subject=subject.replace("_", " ").title(),
+                language_instruction=language_instruction
+            )
+        else:
+            prompt = GENERAL_KNOWLEDGE_PROMPT.format(
+                question=question,
+                class_name=class_name.replace("_", " ").title(),
+                subject=subject.replace("_", " ").title(),
+                language_instruction=language_instruction
+            )
 
         console.print("[bold yellow]🤖 Generating answer...[/bold yellow]\n")
 

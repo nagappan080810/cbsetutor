@@ -4,6 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Quiz Solver — CBSE RAG</title>
+<!-- KaTeX: FOSS (MIT license), renders $...$ / $$...$$ from HTML-extracted
+     questions. PDF-extracted text has no LaTeX so this is a no-op for it. -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/contrib/auto-render.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -140,6 +145,14 @@
   .q-row-body { flex: 1; }
   .q-row-text { font-size: 13.5px; line-height: 1.5; outline: none; }
   .q-row-text:focus { background: var(--accent-bg); border-radius: 4px; }
+  .q-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .edit-toggle {
+    background: none; border: none; color: var(--accent); font-size: 11.5px;
+    cursor: pointer; padding: 2px 4px; text-decoration: underline;
+  }
+  .q-row-preview { display: none; font-size: 14px; line-height: 1.6; margin-bottom: 6px; color: var(--text-primary); }
+  .q-row-preview::before { content: "Preview"; display: block; font-size: 10px; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--text-muted); margin-bottom: 2px; }
   .q-type-badge { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 100px; margin-bottom: 5px; background: var(--surface-2); color: var(--text-secondary); }
   .q-type-badge.mcq { background: #eaf2ff; color: #2f6fce; }
   .q-type-badge.true_false { background: #fdf3e2; color: #b3792a; }
@@ -244,11 +257,11 @@
     </div>
 
     <div class="field">
-      <label>Question paper (PDF)</label>
+      <label>Question paper (PDF or HTML)</label>
       <div class="drop-zone" id="drop-zone">
-        <div id="drop-label">📄 Click or drop a PDF here</div>
+        <div id="drop-label">📄 Click or drop a PDF/HTML file here</div>
         <div class="fname" id="fname"></div>
-        <input type="file" id="file-input" accept="application/pdf" />
+        <input type="file" id="file-input" accept="application/pdf,.pdf,text/html,.html,.htm" />
       </div>
     </div>
 
@@ -328,7 +341,9 @@ dropZone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', () => { if (fileInput.files.length) setFile(fileInput.files[0]); });
 function setFile(f) {
-  if (!f.name.toLowerCase().endsWith('.pdf')) { showError('Only PDF files are accepted.'); return; }
+  const name = f.name.toLowerCase();
+  const isValid = name.endsWith('.pdf') || name.endsWith('.html') || name.endsWith('.htm');
+  if (!isValid) { showError('Only PDF or HTML files are accepted.'); return; }
   fileToUse = f;
   document.getElementById('drop-label').textContent = '📄 Selected:';
   document.getElementById('fname').textContent = f.name;
@@ -417,7 +432,8 @@ async function extractQuestions() {
 
   const sp = document.getElementById('status-panel');
   sp.classList.add('show');
-  setStatus('Reading PDF and extracting questions…');
+  const isHtml = /\.html?$/i.test(fileToUse.name);
+  setStatus(isHtml ? 'Extracting questions from HTML…' : 'Reading PDF and extracting questions…');
   setProgress(0, '');
 
   const form = new FormData();
@@ -454,9 +470,13 @@ function renderQuestionList() {
     <div class="q-row" data-i="${i}">
       <input type="checkbox" checked onchange="extracted[${i}].selected = this.checked" />
       <div class="q-row-body">
-        <span class="q-type-badge ${q.type}">${typeLabel(q.type)}</span>
-        <div class="q-row-text" contenteditable="true"
-             oninput="extracted[${i}].text = this.textContent">${escapeHtml(q.text)}</div>
+        <div class="q-row-top">
+          <span class="q-type-badge ${q.type}">${typeLabel(q.type)}</span>
+          <button type="button" class="edit-toggle" data-edit-i="${i}" onclick="toggleEdit(${i})" style="display:none">Edit source</button>
+        </div>
+        <div class="q-row-preview" data-preview-i="${i}"></div>
+        <div class="q-row-text" data-text-i="${i}" contenteditable="true"
+             oninput="extracted[${i}].text = this.textContent; updatePreview(${i})">${escapeHtml(q.text)}</div>
       </div>
     </div>`).join('');
 
@@ -472,6 +492,62 @@ function renderQuestionList() {
       </div>
     </div>
     ${rows}`;
+  extracted.forEach((_, i) => updatePreview(i));
+}
+
+/* ── math rendering helpers (KaTeX, FOSS/MIT) ──
+   Question text from the HTML-upload path contains raw LaTeX ($...$ /
+   $$...$$). We keep the editable div showing raw source (so edits stay
+   valid LaTeX) and render a preview instead, hidden behind an "Edit
+   source" toggle so both aren't shown stacked at once. PDF-extracted
+   text has no $ delimiters, so this is a harmless no-op for that path. ── */
+function renderMath(el) {
+  if (!el || typeof window.renderMathInElement !== 'function') return;
+  try {
+    window.renderMathInElement(el, {
+      delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$', right: '$', display: false },
+        // The LLM's own generated answers (as opposed to HTML-extracted
+        // question text) use \(...\) / \[...\] rather than $ delimiters --
+        // both styles need to be recognized or the answer's LaTeX renders
+        // as raw backslash text while the question's LaTeX renders fine.
+        { left: '\\[', right: '\\]', display: true },
+        { left: '\\(', right: '\\)', display: false }
+      ],
+      throwOnError: false
+    });
+  } catch (e) { /* malformed LaTeX in a question shouldn't break the page */ }
+}
+function updatePreview(i) {
+  const previewEl = document.querySelector(`[data-preview-i="${i}"]`);
+  const textEl    = document.querySelector(`[data-text-i="${i}"]`);
+  const toggleEl  = document.querySelector(`[data-edit-i="${i}"]`);
+  if (!previewEl || !textEl) return;
+  const text = extracted[i].text;
+  const hasMath = text.includes('$');
+
+  if (hasMath) {
+    previewEl.style.display = 'block';
+    previewEl.textContent = text;
+    renderMath(previewEl);
+    if (toggleEl) toggleEl.style.display = 'inline';
+    if (!textEl.dataset.userOpened) textEl.style.display = 'none';
+  } else {
+    previewEl.style.display = 'none';
+    if (toggleEl) toggleEl.style.display = 'none';
+    textEl.style.display = 'block';
+  }
+}
+function toggleEdit(i) {
+  const textEl   = document.querySelector(`[data-text-i="${i}"]`);
+  const toggleEl = document.querySelector(`[data-edit-i="${i}"]`);
+  if (!textEl) return;
+  const opening = textEl.style.display === 'none';
+  textEl.style.display = opening ? 'block' : 'none';
+  textEl.dataset.userOpened = opening ? '1' : '';
+  if (toggleEl) toggleEl.textContent = opening ? 'Hide source' : 'Edit source';
+  if (opening) textEl.focus();
 }
 function toggleAll(state) {
   extracted.forEach(q => q.selected = state);
@@ -558,6 +634,7 @@ function makeResultCard(num, q) {
     <div class="result-meta" data-meta></div>
     <div class="result-answer" data-answer><span class="cursor-blink"></span></div>
     <div class="result-images" data-images></div>`;
+  renderMath(div.querySelector('.result-q'));
   return div;
 }
 
@@ -603,6 +680,9 @@ async function streamAnswer(body, card) {
           `<span class="src-chip">${basename(s.file)} p.${s.page}</span>`).join('');
         metaEl.innerHTML += chips;
       }
+      if (ev.type === 'notice') {
+        metaEl.innerHTML += `<span class="src-chip" style="background:#fef3c7;color:#92400e;border-color:#fde68a" title="${escapeHtml(ev.message)}">⚠ General knowledge (not textbook-grounded)</span>`;
+      }
       if (ev.type === 'token') {
         answerText += ev.data;
         answerEl.innerHTML = mdToHtml(answerText) + '<span class="cursor-blink"></span>';
@@ -612,19 +692,33 @@ async function streamAnswer(body, card) {
           `<a href="${img.url}" target="_blank"><img src="${img.url}" alt="p.${img.page}" title="${basename(img.source)} p.${img.page}"></a>`).join('');
       }
       if (ev.type === 'done') {
-        answerEl.innerHTML = mdToHtml(answerText) || '<em>(No answer returned.)</em>';
+        answerEl.innerHTML = answerText.trim() ? mdToHtml(answerText) : '<em>(No answer returned — try again, or rephrase the question.)</em>';
+        renderMath(answerEl);
         card.classList.remove('pending');
       }
     }
   }
-  answerEl.innerHTML = mdToHtml(answerText) || '<em>(No answer returned.)</em>';
+  answerEl.innerHTML = answerText.trim() ? mdToHtml(answerText) : '<em>(No answer returned — try again, or rephrase the question.)</em>';
+  renderMath(answerEl);
   card.classList.remove('pending');
   return answerText;
 }
 
 /* ── tiny markdown → HTML (bold, code, line breaks) — no external libs ── */
+/* KaTeX's auto-render matches delimiter pairs within a single DOM text
+   node. mdToHtml() below turns every "\n" into a literal <br>, which
+   splits multi-line \[...\] / $$...$$ blocks (delimiter, body, closing
+   delimiter each on their own line -- common in LLM output) into
+   separate text nodes with <br> in between. auto-render then can't see
+   the full expression and leaves it unrendered as raw text. Fix: collapse
+   whitespace/newlines *inside* math delimiters into single spaces before
+   the <br> conversion runs, so each expression stays one text node. */
+function protectMathNewlines(s) {
+  return s.replace(/\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)/g,
+    m => m.replace(/\s*\n\s*/g, ' '));
+}
 function mdToHtml(s) {
-  let h = escapeHtml(s);
+  let h = escapeHtml(protectMathNewlines(s));
   h = h.replace(/```([\s\S]*?)```/g, (_, c) => `<pre><code>${c.trim()}</code></pre>`);
   h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
   h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -655,6 +749,7 @@ function renderYourAnswer(card, q, answerText) {
       row.appendChild(b);
     });
     wrap.appendChild(row);
+    renderMath(row);
     if (!correctLetter) wrap.appendChild(gradeNote("Couldn't auto-detect the correct option from the answer above — compare manually."));
 
   } else if (q.type === 'true_false') {

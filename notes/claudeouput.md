@@ -544,3 +544,8 @@ We can have coordinator which delegates rag agent to find and rank the answers a
                                ├──────────────────────┐
                                ▼ (If Valid)           ▼ (If Still Invalid)
                         [Deliver Answer]       [Polite "Not Found" Msg]
+
+                        Removing snap firefox and revision 8568
+rm: cannot remove '/var/snap/firefox/common/host-hunspell/en_US.aff': Read-only file system
+rm: cannot remove '/var/snap/firefox/common/host-hunspell/en_US.dic': Read-only file system
+dpkg: error processing package snapd (--purge):

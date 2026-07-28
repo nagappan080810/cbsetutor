@@ -13,7 +13,7 @@ API:
   GET  /api/files/{class_name}/{subject}
   POST /api/ask                         → SSE streaming answer + confidence
   POST /api/upload                      → Upload PDF + ingest
-  POST /api/extract-questions           → Extract questions from PDF
+  POST /api/extract-questions           → Extract questions from PDF or HTML
   GET  /api/images/{filename}
   GET  /api/images
   GET  /api/ingest/status
@@ -144,8 +144,52 @@ QUESTION: {question}
 
 ANSWER:"""
 
+# ── Fallback prompt: used only when retrieval confidence is too low to
+# ground the answer. Forcing BASE_PROMPT's strict "ONLY use context" rules
+# onto irrelevant/empty context produces either a refusal or an LLM that
+# keeps reaching for the `calculate` tool trying to reconcile numbers that
+# aren't actually in the context -- which is what caused the retry-stall on
+# self-contained problems (e.g. "verify this trig identity") that have no
+# matching textbook passage to retrieve, by design. This lets the model
+# answer from its own subject knowledge instead, clearly labelled as such.
+GENERAL_KNOWLEDGE_PROMPT = """You are an expert CBSE tutor for {class_name}, subject: {subject}.
+
+{language_instruction}
+
+No sufficiently relevant passage was found in the NCERT textbook corpus for
+this question -- expected for self-contained problems (e.g. "verify this
+identity", "solve for x") that don't correspond to any specific textbook
+passage, not necessarily a sign something is wrong.
+
+Answer using your own subject knowledge instead, following these rules:
+- Stay strictly within the CBSE {class_name} syllabus for {subject} -- do not
+  use methods, notation, or content from a different grade level.
+- For ANY arithmetic, algebra, or numeric result, ALWAYS call the
+  `calculate` tool with a single self-contained expression instead of
+  computing mentally. If a calculate call errors, do not retry the same
+  broken form -- rephrase once as a single expression, or otherwise proceed
+  with careful manual working.
+
+ANSWER FORMAT:
+{answer_mode_instruction}
+
+General rules:
+- Use simple language for a school student
+- Use markdown: **bold** for key terms, ``` for formulas
+
+---
+QUESTION: {question}
+
+ANSWER:"""
+
+MIN_CONFIDENCE_FOR_GROUNDED_ANSWER = float(os.getenv("MIN_CONFIDENCE_FOR_GROUNDED_ANSWER", 35.0))
+
 # ── Shared RAG chain (retriever + LLM, provider selection lives in one place) ──
 from src.rag_chain import get_rag_chain
+# CONCEPT GRAPH HOOK (1/2): import. Delete this line + the two call sites
+# marked "CONCEPT GRAPH HOOK" below to fully remove the feature.
+from src import concept_graph
+from src.html_question_extractor import extract_questions_from_html, guess_question_type
 
 # ── Request models ────────────────────────────────────────────────────────────
 class AskRequest(BaseModel):
@@ -210,6 +254,28 @@ def find_relevant_images(class_name, subject, source_docs, max_images=3):
     scored.sort(key=lambda x: x[0], reverse=True)
     return [img for _, img in scored[:max_images]]
 
+def _extract_pdf_text(pdf_path: str) -> str:
+    """fitz first (better layout handling), pypdf fallback. Shared by
+    /api/extract-questions and the concept-graph ingestion hook so there's
+    one implementation instead of two copies drifting apart."""
+    text = ""
+    try:
+        import fitz
+        fitz.TOOLS.mupdf_display_errors(False)
+        fitz.TOOLS.mupdf_display_warnings(False)
+        doc = fitz.open(pdf_path)
+        for page in doc:
+            try: text += page.get_text("text") + "\n"
+            except: pass
+        doc.close()
+    except Exception:
+        import pypdf
+        reader = pypdf.PdfReader(pdf_path, strict=False)
+        for page in reader.pages:
+            try: text += (page.extract_text() or "") + "\n"
+            except: pass
+    return text
+
 def score_to_confidence(raw_score: float) -> float:
     """Sigmoid transform of CrossEncoder score → 0-100%."""
     sigmoid = 1.0 / (1.0 + math.exp(-float(raw_score)))
@@ -230,7 +296,19 @@ def confidence_color(pct: float) -> str:
 def sse(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-async def _iter_with_timeout(agen, timeout: float = 45.0):
+# 45s was an initial guess, not a measured value. Multi-part questions can
+# legitimately need 3-4 sequential LLM round-trips (initial call -> tool
+# result -> possibly another tool call -> final synthesis), and large NIM
+# models can take 10-15s+ per round-trip on shared/free tiers -- so 45s
+# total was sometimes just not enough time for genuinely correct, unstuck
+# generation. Raise via LLM_STREAM_TIMEOUT_SECONDS if your provider is
+# consistently slower than this default; the batching guidance in the
+# `calculate` tool docstring (see rag_chain.py) reduces how many
+# round-trips are needed in the first place, which matters more than the
+# raw timeout value for multi-part questions.
+LLM_STREAM_TIMEOUT_SECONDS = float(os.getenv("LLM_STREAM_TIMEOUT_SECONDS", 90.0))
+
+async def _iter_with_timeout(agen, timeout: float = LLM_STREAM_TIMEOUT_SECONDS):
     """
     Wrap an async generator so that if any single step stalls for longer
     than `timeout` seconds, we raise asyncio.TimeoutError instead of hanging
@@ -248,6 +326,76 @@ async def _iter_with_timeout(agen, timeout: float = 45.0):
         except StopAsyncIteration:
             return
         yield item
+
+
+class ThinkTagFilter:
+    """
+    Streaming filter that strips <think>...</think> reasoning blocks (some
+    models, including the NVIDIA NIM models used here, emit these before
+    their real answer) from a token stream -- correctly handling the tags
+    being split across arbitrary chunk boundaries.
+
+    Why the previous approach (`re.sub(r"<think>.*", "", token,
+    flags=re.DOTALL)` applied independently to each streamed token) was
+    broken: it can only strip content that lands in the SAME chunk as the
+    literal "<think>" text. In practice, streamed tokens are small
+    (sometimes single words/subwords) and a model's reasoning block spans
+    many chunks -- so that regex reliably caught the opening tag (turning
+    that one chunk to "") but had no memory of still being "inside" a think
+    block for every subsequent chunk. Since those later chunks don't
+    individually contain the literal string "<think>", the regex found
+    nothing to substitute and passed them through completely unfiltered:
+    raw chain-of-thought reasoning leaked straight into the visible answer.
+    Worse, on questions where the model reasons for a long time before
+    ever emitting closing remarks, wall-clock time spent generating that
+    (invisible-to-filter but not invisible-to-timer) reasoning is what
+    burns through the 45s budget before any real answer text arrives --
+    which is why longer "verify this identity" questions were hit hardest.
+
+    This class instead tracks open/close state explicitly across calls to
+    feed(), and holds back only the minimum trailing buffer needed to
+    detect a tag split across a chunk boundary (not the whole hidden
+    reasoning block, so memory stays bounded regardless of how long the
+    model reasons for).
+    """
+    _OPEN  = "<think>"
+    _CLOSE = "</think>"
+
+    def __init__(self):
+        self._buffer = ""
+        self._inside = False
+
+    def feed(self, chunk: str) -> str:
+        self._buffer += chunk
+        out = []
+        while True:
+            tag = self._CLOSE if self._inside else self._OPEN
+            idx = self._buffer.find(tag)
+            if idx == -1:
+                # No complete tag in the buffer yet. Hold back just enough
+                # trailing characters in case they're the start of a tag
+                # that continues in the next chunk; anything before that
+                # is safe to flush now (if we're not currently hidden
+                # inside a think block).
+                keep = max(len(self._OPEN), len(self._CLOSE)) - 1
+                safe_len = max(0, len(self._buffer) - keep)
+                if not self._inside:
+                    out.append(self._buffer[:safe_len])
+                self._buffer = self._buffer[safe_len:]
+                break
+            if not self._inside:
+                out.append(self._buffer[:idx])
+            self._buffer = self._buffer[idx + len(tag):]
+            self._inside = not self._inside
+        return "".join(out)
+
+    def flush(self) -> str:
+        """Call once after the stream ends to release any safely-held-back
+        trailing text that turned out not to be a split tag after all."""
+        remaining = self._buffer if not self._inside else ""
+        self._buffer = ""
+        return remaining
+
 
 # ── SSE generator ─────────────────────────────────────────────────────────────
 async def answer_stream(req: AskRequest) -> AsyncGenerator[str, None]:
@@ -356,42 +504,120 @@ async def answer_stream(req: AskRequest) -> AsyncGenerator[str, None]:
         total_len += len(doc.page_content)
 
     context  = "\n\n---\n\n".join(context_parts)
+
+    # CONCEPT GRAPH HOOK: append structured concept knowledge (definitions,
+    # formulas, known misconceptions, related concepts) alongside the raw
+    # Chroma chunks above. get_context_for_topics() returns "" if the graph
+    # is disabled, empty, or nothing matched -- context is then identical
+    # to what this endpoint produced before this hook existed.
+    graph_matches = 0
+    if concept_graph.CONCEPT_GRAPH_ENABLED:
+        graph_topics = req.topics or [req.question]
+        graph_block  = concept_graph.get_context_for_topics(graph_topics, req.class_name, req.subject)
+        graph_matches = concept_graph.match_count(graph_topics, req.class_name, req.subject)
+        if graph_block:
+            context = (
+                f"{context}\n\n--- CONCEPT GRAPH KNOWLEDGE "
+                f"(verified relationships & known student misconceptions) ---\n{graph_block}"
+            )
+
+    yield sse({"type":"graph","matched_concepts":graph_matches})
+    await asyncio.sleep(0)
+
     lang_ins = LANGUAGE_INSTRUCTIONS.get(req.subject, "Respond in English.")
     mode_ins = ANSWER_MODE_INSTRUCTIONS.get(
         req.answer_mode, ANSWER_MODE_INSTRUCTIONS["detailed"]
     )
 
-    prompt = BASE_PROMPT.format(
-        context=context,
-        question=req.question,
-        class_name=req.class_name.replace("_"," ").title(),
-        subject=req.subject.replace("_"," ").title(),
-        language_instruction=lang_ins,
-        answer_mode_instruction=mode_ins,
-    )
+    # ── Grounded vs. general-knowledge fallback ────────────────────────────
+    # Below the confidence floor, don't force the strict context-only prompt
+    # onto weak/irrelevant chunks -- let the LLM answer from its own
+    # CBSE-syllabus knowledge instead, clearly flagged so the frontend can
+    # show it as such. See MIN_CONFIDENCE_FOR_GROUNDED_ANSWER above for why.
+    context_sufficient = overall_pct >= MIN_CONFIDENCE_FOR_GROUNDED_ANSWER
+
+    if context_sufficient:
+        prompt = BASE_PROMPT.format(
+            context=context,
+            question=req.question,
+            class_name=req.class_name.replace("_"," ").title(),
+            subject=req.subject.replace("_"," ").title(),
+            language_instruction=lang_ins,
+            answer_mode_instruction=mode_ins,
+        )
+    else:
+        prompt = GENERAL_KNOWLEDGE_PROMPT.format(
+            question=req.question,
+            class_name=req.class_name.replace("_"," ").title(),
+            subject=req.subject.replace("_"," ").title(),
+            language_instruction=lang_ins,
+            answer_mode_instruction=mode_ins,
+        )
+        yield sse({
+            "type": "notice",
+            "message": "No closely matching textbook passage found — answering from general subject knowledge instead.",
+        })
+        await asyncio.sleep(0)
 
     yield sse({"type":"status","message":"Generating answer…"})
     await asyncio.sleep(0)
 
     # ── Stream tokens ─────────────────────────────────────────────────────────
+    think_filter = ThinkTagFilter()
+    any_visible  = False
     try:
         from langchain_core.messages import HumanMessage
         # NOTE: previously this sent req.question directly, bypassing the
         # `prompt` built above entirely -- meaning the retrieved textbook
         # context and anti-hallucination rules were never actually reaching
         # the model here. Fixed to use `prompt`.
+        conversation = [HumanMessage(content=prompt)]
         async for token in _iter_with_timeout(
-            get_rag_chain().astream_with_tools([HumanMessage(content=prompt)]),
-            timeout=45.0,
+            get_rag_chain().astream_with_tools(conversation),
+            timeout=LLM_STREAM_TIMEOUT_SECONDS,
         ):
-            visible = re.sub(r"<think>.*", "", token, flags=re.DOTALL)
+            visible = think_filter.feed(token)
             if visible:
+                any_visible = True
                 yield sse({"type":"token","data":visible})
+                await asyncio.sleep(0)
+        trailing = think_filter.flush()
+        if trailing:
+            any_visible = True
+            yield sse({"type":"token","data":trailing})
+            await asyncio.sleep(0)
+
+        # If literally every token was consumed by hidden <think> reasoning
+        # (model ran long on reasoning and never got to visible output, or
+        # cut off mid-thought), don't leave the user with a blank card --
+        # force one more plain-text, no-tools turn asking directly for the
+        # answer. This is a distinct case from the max_tool_iterations
+        # forced-turn already inside astream_with_tools(): that one fires
+        # when tool_calls are still pending at the iteration cap, this one
+        # fires when the model produced tokens but none of them were ever
+        # visible to the user.
+        if not any_visible:
+            conversation.append(HumanMessage(
+                content="Answer the question directly now, in plain text, "
+                        "with no <think> reasoning block and no further "
+                        "tool calls -- just the final worked answer."
+            ))
+            async for token in _iter_with_timeout(
+                get_rag_chain().astream_with_tools(conversation),
+                timeout=LLM_STREAM_TIMEOUT_SECONDS,
+            ):
+                visible = think_filter.feed(token)
+                if visible:
+                    yield sse({"type":"token","data":visible})
+                    await asyncio.sleep(0)
+            trailing = think_filter.flush()
+            if trailing:
+                yield sse({"type":"token","data":trailing})
                 await asyncio.sleep(0)
     except asyncio.TimeoutError:
         yield sse({
             "type":"error",
-            "message":"Generation stalled and didn't respond for 45s. Please try again."
+            "message":f"Generation stalled and didn't respond for {int(LLM_STREAM_TIMEOUT_SECONDS)}s. Please try again."
         })
         return
     except Exception as e:
@@ -769,6 +995,24 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
         total_len += len(doc.page_content)
     context = "\n\n---\n\n".join(context_parts)
 
+    # CONCEPT GRAPH HOOK: same append-only pattern as answer_stream. Worksheet
+    # generation is the primary beneficiary -- misconceptions/contrasts here
+    # are what let the LLM write genuinely tricky (not just recall) questions
+    # instead of relying on it to invent plausible-sounding distractors cold.
+    graph_matches = 0
+    if concept_graph.CONCEPT_GRAPH_ENABLED:
+        graph_block   = concept_graph.get_context_for_topics(req.topics, req.class_name, req.subject)
+        graph_matches = concept_graph.match_count(req.topics, req.class_name, req.subject)
+        if graph_block:
+            context = (
+                f"{context}\n\n--- CONCEPT GRAPH KNOWLEDGE "
+                f"(verified relationships & known student misconceptions -- use these "
+                f"to sharpen distractors and case-study twists) ---\n{graph_block}"
+            )
+
+    yield sse({"type":"graph","matched_concepts":graph_matches})
+    await asyncio.sleep(0)
+
     lang_ins = LANGUAGE_INSTRUCTIONS.get(req.subject, "Respond in English.")
 
     qtype_labels = {
@@ -793,21 +1037,29 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
 
     # Stream LLM output and collect full response
     full_response = ""
+    think_filter  = ThinkTagFilter()
     try:
         from langchain_core.messages import HumanMessage
         async for token in _iter_with_timeout(
             get_rag_chain().astream_with_tools([HumanMessage(content=prompt)]),
-            timeout=45.0,
+            timeout=LLM_STREAM_TIMEOUT_SECONDS,
         ):
-            full_response += token
-            yield sse({"type":"progress","data":token})
+            visible = think_filter.feed(token)
+            if visible:
+                full_response += visible
+                yield sse({"type":"progress","data":visible})
+                await asyncio.sleep(0)
+        trailing = think_filter.flush()
+        if trailing:
+            full_response += trailing
+            yield sse({"type":"progress","data":trailing})
             await asyncio.sleep(0)
     except asyncio.TimeoutError:
         yield sse({
             "type":"error",
-            "message":"Generation stalled (likely during a calculation step) and "
-                       "didn't respond for 45s. Please try again — if it keeps "
-                       "happening, try fewer questions or a narrower topic."
+            "message":f"Generation stalled (likely during a calculation step) and " \
+                       f"didn't respond for {int(LLM_STREAM_TIMEOUT_SECONDS)}s. Please try again — if it keeps " \
+                       f"happening, try fewer questions or a narrower topic."
         })
         return
     except Exception as e:
@@ -974,7 +1226,31 @@ async def upload_pdf(
             batch_size, tracker, force=True
         )
         chunks = tracker.get(pdf_info["key"],{}).get("chunks", 0)
-        return {"status":"ok","filename":file.filename,"chunks":chunks}
+
+        # CONCEPT GRAPH HOOK (2/2): build/update the concept graph for this
+        # chapter. Wrapped so a graph-extraction failure never blocks the
+        # ingestion response the UI is waiting on -- Chroma ingestion above
+        # has already succeeded and stands on its own either way.
+        graph_result = {"status": "skipped"}
+        if concept_graph.CONCEPT_GRAPH_ENABLED:
+            try:
+                chapter_text = _extract_pdf_text(dest_path)
+                graph_result = concept_graph.build_from_chapter_text(
+                    chapter_text=chapter_text,
+                    class_name=class_name,
+                    subject=subject,
+                    chapter=file.filename,
+                    llm_raw=get_rag_chain().llm_raw,
+                    source=file.filename,
+                )
+            except Exception as e:
+                console.print(f"[red]concept_graph build failed for {file.filename}: {e}[/red]")
+                graph_result = {"status": "error", "message": str(e)}
+
+        return {
+            "status": "ok", "filename": file.filename, "chunks": chunks,
+            "concept_graph": graph_result,
+        }
 
     except Exception as e:
         raise HTTPException(500, f"Ingestion error: {str(e)}")
@@ -985,30 +1261,44 @@ async def extract_questions(
     class_name: str        = Form(...),
     subject:    str        = Form(...)
 ):
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(400, "Only PDF files accepted")
+    filename_lower = file.filename.lower()
+    if not filename_lower.endswith((".pdf", ".html", ".htm")):
+        raise HTTPException(400, "Only PDF or HTML files accepted")
 
+    # ── HTML path: structured extraction, no LLM call needed ───────────────
+    # Handles Mathpix-style OCR exports (photo -> HTML) where each formula's
+    # exact LaTeX already ships as a hidden sibling next to its rendered SVG
+    # glyphs -- see src/html_question_extractor.py for why this is reliable
+    # without OCR/vision. Type classification is a free local heuristic
+    # (guess_question_type), not an LLM call, since the questions are
+    # already cleanly segmented by the extractor -- there's nothing for an
+    # LLM re-extraction pass to add here, only cost/latency.
+    if filename_lower.endswith((".html", ".htm")):
+        try:
+            raw_bytes = await file.read()
+            extracted = extract_questions_from_html(raw_bytes)
+
+            if not extracted:
+                raise HTTPException(422, "Could not extract any questions from this HTML file")
+
+            valid = [
+                {"text": q.text, "type": guess_question_type(q.text)}
+                for q in extracted
+            ]
+            return {"questions": valid, "total": len(valid)}
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(500, f"HTML extraction error: {str(e)}")
+
+    # ── PDF path: existing text extraction + LLM re-structuring ────────────
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         shutil.copyfileobj(file.file, tmp)
         tmp_path = tmp.name
 
     try:
-        text = ""
-        try:
-            import fitz
-            fitz.TOOLS.mupdf_display_errors(False)
-            fitz.TOOLS.mupdf_display_warnings(False)
-            doc = fitz.open(tmp_path)
-            for page in doc:
-                try: text += page.get_text("text") + "\n"
-                except: pass
-            doc.close()
-        except Exception:
-            import pypdf
-            reader = pypdf.PdfReader(tmp_path, strict=False)
-            for page in reader.pages:
-                try: text += (page.extract_text() or "") + "\n"
-                except: pass
+        text = _extract_pdf_text(tmp_path)
 
         if not text.strip():
             raise HTTPException(422, "Could not extract text from PDF")
