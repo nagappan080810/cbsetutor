@@ -5,3 +5,7 @@ venv*
 .env
 data/**
 image_store/**
+concept_graphs/**
+*.log
+models/**
+
