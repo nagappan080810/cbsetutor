@@ -4,6 +4,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_deepseek import ChatDeepSeek
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI  # used for opencode_zen -- OpenAI-compatible endpoint, no dedicated langchain client exists
 from langchain_core.messages import HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from src.retriever import CBSERetriever
@@ -298,7 +299,9 @@ class CBSERagChain:
 
         # LLM_PROVIDER selects which backend to use without touching code.
         # Options: "deepseek" (default, direct DeepSeek API) | "nvidia" (NIM
-        # hosted catalog) | "groq" (Llama via Groq).
+        # hosted catalog) | "groq" (Llama via Groq) | "opencode_zen" (OpenAI-
+        # compatible gateway, currently free-tier DeepSeek V4 Flash -- see
+        # notes below on why this is dev/experimentation-only, not prod).
         provider = os.getenv("LLM_PROVIDER", "deepseek").lower()
 
         if provider == "nvidia":
@@ -315,6 +318,22 @@ class CBSERagChain:
             self.llm_raw = ChatGroq(
                 model=os.getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
                 api_key=os.getenv("GROQ_API_KEY"),
+                temperature=0.1,
+                max_tokens=2048,
+            )
+
+        elif provider == "opencode_zen":
+            # No dedicated langchain_opencode client exists -- Zen exposes a
+            # generic OpenAI-compatible /chat/completions endpoint, so we
+            # point the generic ChatOpenAI client at it via base_url.
+            # NOTE: the free-tier model listing here (deepseek-v4-flash-free)
+            # is promotional and carries a data-retention exception during
+            # its free period -- use for dev/experimentation, not production
+            # worksheet traffic. Prefer "deepseek" (first-party API) for prod.
+            self.llm_raw = ChatOpenAI(
+                model=os.getenv("LLM_MODEL", "deepseek-v4-flash-free"),
+                api_key=os.getenv("OPENCODE_API_KEY"),
+                base_url="https://opencode.ai/zen/v1",
                 temperature=0.1,
                 max_tokens=2048,
             )
@@ -352,13 +371,33 @@ class CBSERagChain:
         iterations = 0
         while True:
             gathered = None
+            chunk_count = 0
             async for chunk in self.llm.astream(messages):
+                chunk_count += 1
                 if chunk.content:
                     console.print(f"content generated...{chunk.content}")
                     yield chunk.content
                 else:
                     console.print(f"content not generated...")
                 gathered = chunk if gathered is None else gathered + chunk
+
+            if chunk_count == 0:
+                # astream() completed its iteration having yielded nothing
+                # at all -- not a normal empty-content chunk, but zero
+                # chunks total. This is how a provider-side failure (rate
+                # limit, empty SSE body, etc.) surfaces when the client
+                # library swallows it instead of raising. Left unchecked,
+                # this silently ends the generator, callers see an empty
+                # full_response, and any downstream json.loads() fails with
+                # a misleading "Expecting value: line 1 column 1" instead
+                # of the actual cause. Raise here, at the call site, so it
+                # propagates as a real error to whichever caller is
+                # wrapping this in try/except (api.py's SSE handlers).
+                raise RuntimeError(
+                    f"LLM provider returned an empty stream (no chunks received). "
+                    f"This usually means a rate-limit or provider-side error that "
+                    f"didn't surface as an exception. LLM_PROVIDER={os.getenv('LLM_PROVIDER', 'unknown')!r}."
+                )
 
             tool_calls = getattr(gathered, "tool_calls", None) if gathered else None
 

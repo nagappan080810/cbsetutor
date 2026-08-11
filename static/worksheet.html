@@ -140,7 +140,6 @@
   }
   .options{list-style:none; margin:10px 0 0; padding:0; display:grid; gap:5px;}
   .options li{font-size:13.5px; color:var(--ink-soft); padding-left:2px;}
-  .options li.correct-opt{color:var(--red); font-weight:500;}
 
   .answer-block{
     margin-top:10px; background:var(--red-soft); border-left:3px solid var(--red);
@@ -464,9 +463,9 @@ function renderSheet(ws){
       const mid = `q${qCounter}`;
       let body = `<div class="qtext">${escapeHtml(q.text)}<span class="qtype-badge">${q.type}</span></div>`;
       if (q.type === 'mcq' && Array.isArray(q.options)){
-        body += `<ul class="options">${q.options.map(opt =>
-          `<li class="${opt.trim().startsWith(q.answer + '.') ? 'correct-opt' : ''}">${escapeHtml(opt)}</li>`
-        ).join('')}</ul>`;
+body += `<ul class="options">${q.options.map(opt =>
+           `<li>${escapeHtml(opt)}</li>`
+         ).join('')}</ul>`;
       }
       let answerBlock = '';
       if (q.answer){

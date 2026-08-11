@@ -68,13 +68,16 @@ def _top_level_question_lists(soup: BeautifulSoup) -> List[Tag]:
     Returns <ul>/<ol> elements that hold questions, excluding any that are
     nested inside another question's <li> (those are sub-parts like i), ii)
     and get captured as part of the parent question's text instead).
+
+    Deliberately NOT filtered by class name ("itemize"/"enumerate" etc.) --
+    different Mathpix export settings/versions emit different list classes
+    (observed: "itemize", and separately "preview-paragraph-N preview-line
+    ..." with no itemize/enumerate class at all). Any <ul>/<ol> not nested
+    inside a <li> is a question list candidate; sub-parts (i), ii)...) are
+    already excluded because *their* <ol>/<ul> IS nested inside a <li>.
     """
-    lists = soup.find_all(["ul", "ol"], class_=["itemize", "enumerate"])
-    top_level = []
-    for lst in lists:
-        if lst.find_parent("li") is None:
-            top_level.append(lst)
-    return top_level
+    lists = soup.find_all(["ul", "ol"])
+    return [lst for lst in lists if lst.find_parent("li") is None]
 
 
 def extract_questions_from_html(html_content: bytes | str) -> List[ExtractedQuestion]:
@@ -84,30 +87,78 @@ def extract_questions_from_html(html_content: bytes | str) -> List[ExtractedQues
 
     Falls back to paragraph-level extraction if no <ul>/<ol> question
     list is found (handles plain HTML that isn't a Mathpix export).
+
+    Question boundaries are found by walking #preview-content in document
+    order rather than looking only inside each <li>. This matters because
+    some Mathpix export layouts leave the <li> empty (just a numbering
+    placeholder) and put the actual content -- text and/or a math-inline/
+    math-block span -- in a following sibling <div>/<p> after the list
+    closes (observed when a multi-line equation doesn't fit the inline
+    list-item layout). A pure per-<li> extractor silently drops that
+    content or misattributes it as an unnumbered fragment.
     """
     if isinstance(html_content, bytes):
         html_content = html_content.decode("utf-8", errors="replace")
 
     soup = BeautifulSoup(html_content, "html.parser")
+    root = soup.select_one("#preview-content") or soup.find("body") or soup
     question_lists = _top_level_question_lists(soup)
 
     results: List[ExtractedQuestion] = []
 
     if question_lists:
-        for lst in question_lists:
-            for li in lst.find_all("li", recursive=False):
-                li_copy = BeautifulSoup(str(li), "html.parser").find(li.name)
-                marker_tag = li_copy.find(class_="li_level")
-                number = marker_tag.get_text().strip() if marker_tag else None
-                if marker_tag:
-                    marker_tag.decompose()
+        current: Optional[dict] = None  # {"number": str|None, "parts": [str], "raw": [str]}
 
-                _inline_math(li_copy)
-                text = _clean_text(li_copy)
+        def flush():
+            if current is not None:
+                text = " ".join(p for p in current["parts"] if p).strip()
+                text = " ".join(text.split())
                 if text:
                     results.append(
-                        ExtractedQuestion(number=number, text=text, raw_html=str(li))
+                        ExtractedQuestion(
+                            number=current["number"],
+                            text=text,
+                            raw_html="".join(current["raw"]),
+                        )
                     )
+
+        def add_content(node: Tag) -> None:
+            node_copy = BeautifulSoup(str(node), "html.parser").find(node.name)
+            marker_tag = node_copy.find(class_="li_level") if node_copy else None
+            if marker_tag:
+                marker_tag.decompose()
+            if node_copy is not None:
+                _inline_math(node_copy)
+                text = _clean_text(node_copy)
+                if text:
+                    current["parts"].append(text)
+            current["raw"].append(str(node))
+
+        for child in root.find_all(recursive=False):
+            if child.name in ("script", "style"):
+                continue
+
+            if child.name in ("ul", "ol") and child in question_lists:
+                for i, li in enumerate(child.find_all("li", recursive=False)):
+                    marker_tag = li.find(class_="li_level")
+                    if marker_tag:
+                        number = marker_tag.get_text().strip()
+                    else:
+                        start = int(child.get("start", 1) or 1)
+                        number = f"{start + i}."
+
+                    flush()
+                    current = {"number": number, "parts": [], "raw": []}
+                    add_content(li)
+            else:
+                # Content outside any list: either a preamble (before the
+                # first question opens -- ignored) or a continuation of the
+                # most recently opened question (e.g. the trailing sibling
+                # <div> that fills in an empty <li> placeholder).
+                if current is not None:
+                    add_content(child)
+
+        flush()
     else:
         # Fallback: no structured list found — treat each top-level
         # paragraph/div as one candidate question.

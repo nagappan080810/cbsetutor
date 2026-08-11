@@ -20,6 +20,7 @@ API:
 """
 
 import os
+import random
 import re
 import json
 import math
@@ -796,6 +797,44 @@ QTYPE_SECTION_NAMES = {
     "long":      "Long Answer / Essay Questions",
 }
 
+
+def _randomize_mcq_options(worksheet: dict) -> dict:
+    """Shuffle MCQ option order so the correct answer is not always at B or C.
+
+    Rewrites each option's leading letter (A–D) after shuffling and updates
+    the answer key to match the new position of the correct option.
+    """
+    for section in worksheet.get("sections", []):
+        for q in section.get("questions", []):
+            if q.get("type") != "mcq":
+                continue
+            options = q.get("options")
+            if not isinstance(options, list) or len(options) < 2:
+                continue
+            answer_letter = str(q.get("answer", "")).upper().strip()
+            parsed = []
+            correct_idx = None
+            for i, opt in enumerate(options):
+                m = re.match(r"^([A-D])\.\s*(.*)$", opt.strip(), re.IGNORECASE)
+                if m:
+                    letter = m.group(1).upper()
+                    text = m.group(2)
+                    if letter == answer_letter:
+                        correct_idx = i
+                    parsed.append(text)
+                else:
+                    parsed.append(opt)
+            if correct_idx is None:
+                continue
+            indices = list(range(len(parsed)))
+            random.shuffle(indices)
+            new_options = [f"{chr(ord('A') + i)}. {parsed[j]}" for i, j in enumerate(indices)]
+            new_answer = chr(ord('A') + indices.index(correct_idx))
+            q["options"] = new_options
+            q["answer"] = new_answer
+    return worksheet
+
+
 async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
     if req.class_name not in SUPPORTED_CLASSES:
         yield sse({"type":"error","message":f"Invalid class: {req.class_name}"}); return
@@ -1074,6 +1113,7 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
         if match:
             clean = match.group(0)
         worksheet = json.loads(clean)
+        _randomize_mcq_options(worksheet)
         yield sse({"type":"worksheet","data":worksheet})
     except Exception as e:
         yield sse({"type":"error","message":f"Could not parse worksheet JSON: {e}. Try again."}); return
@@ -1313,6 +1353,17 @@ PAPER:
 
         from langchain_core.messages import HumanMessage
         response = await get_rag_chain().llm.ainvoke([HumanMessage(content=extraction_prompt)])
+
+        if not response.content or not response.content.strip():
+            # Distinguish "provider returned nothing" (rate-limit/error) from
+            # a genuine parse failure -- otherwise this falls through to the
+            # json.JSONDecodeError handler below and gets misreported as a
+            # PDF-quality problem ("try a cleaner PDF") when the PDF was fine.
+            raise RuntimeError(
+                f"LLM provider returned an empty response during question "
+                f"extraction. LLM_PROVIDER={os.getenv('LLM_PROVIDER', 'unknown')!r}."
+            )
+
         raw = re.sub(r"^```(?:json)?","",response.content.strip()).strip()
         raw = re.sub(r"```$","",raw).strip()
 
