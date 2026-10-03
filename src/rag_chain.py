@@ -337,6 +337,8 @@ class CBSERagChain:
                 temperature=0.1,
                 max_tokens=2048,
             )
+            print("llm model:", os.getenv("LLM_MODEL", "deepseek-v4-flash-free"))
+            print("[yellow]⚠ Using opencode_zen free-tier model. This is for dev/experimentation only, not production. Use LLM_PROVIDER=deepseek for production traffic.[/yellow]")
 
         else:  # "deepseek" default — direct DeepSeek API
             self.llm_raw = ChatDeepSeek(

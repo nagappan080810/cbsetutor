@@ -264,6 +264,7 @@
         <label class="check-pill"><input type="checkbox" value="truefalse">True/False</label>
         <label class="check-pill"><input type="checkbox" value="fillblank">Fill blank</label>
         <label class="check-pill"><input type="checkbox" value="long">Long answer</label>
+        <label class="check-pill"><input type="checkbox" value="assertreason">Assertion-Reason</label>
       </div>
     </div>
 
@@ -455,17 +456,39 @@ function handleEvent(evt){
   }
 }
 
+// Fixed CBSE assertion-reason options -- always this exact wording/order,
+// so the frontend renders them rather than trusting the model to
+// reproduce them verbatim every time (cheaper, and can't drift).
+const ASSERT_REASON_OPTIONS = [
+  "A. Both A and R are true and R is the correct explanation of A.",
+  "B. Both A and R are true but R is NOT the correct explanation of A.",
+  "C. A is true but R is false.",
+  "D. A is false but R is true.",
+];
+
 function renderSheet(ws){
   let qCounter = 0;
   const sectionsHtml = (ws.sections || []).map(section => {
     const rows = (section.questions || []).map(q => {
       qCounter++;
       const mid = `q${qCounter}`;
-      let body = `<div class="qtext">${escapeHtml(q.text)}<span class="qtype-badge">${q.type}</span></div>`;
-      if (q.type === 'mcq' && Array.isArray(q.options)){
-body += `<ul class="options">${q.options.map(opt =>
+      let body;
+      if (q.type === 'assertreason'){
+        body = `<div class="qtext">
+          <div><strong>Assertion (A):</strong> ${escapeHtml(q.assertion || '')}</div>
+          <div><strong>Reason (R):</strong> ${escapeHtml(q.reason || '')}</div>
+          <span class="qtype-badge">${q.type}</span>
+        </div>`;
+        body += `<ul class="options">${ASSERT_REASON_OPTIONS.map(opt =>
            `<li>${escapeHtml(opt)}</li>`
          ).join('')}</ul>`;
+      } else {
+        body = `<div class="qtext">${escapeHtml(q.text)}<span class="qtype-badge">${q.type}</span></div>`;
+        if (q.type === 'mcq' && Array.isArray(q.options)){
+          body += `<ul class="options">${q.options.map(opt =>
+             `<li>${escapeHtml(opt)}</li>`
+           ).join('')}</ul>`;
+        }
       }
       let answerBlock = '';
       if (q.answer){

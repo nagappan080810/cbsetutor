@@ -206,7 +206,7 @@ class WorksheetRequest(BaseModel):
     subject:      str        = Field(..., example="mathematics")
     topics:       list[str]  = Field(..., min_length=1)
     difficulty:   Literal["easy","medium","hard","mixed"] = "medium"
-    question_types: list[Literal["mcq","short","truefalse","fillblank","long"]] = ["mcq","short"]
+    question_types: list[Literal["mcq","short","truefalse","fillblank","long","assertreason"]] = ["mcq","short"]
     num_questions: int       = Field(10, ge=3, le=30)
     max_context:   int       = Field(3000, ge=500, le=6000)
     extra_instructions: str  = Field("", max_length=500)
@@ -650,6 +650,8 @@ DIFFICULTY_GUIDANCE = {
 - MCQ distractors should be clearly wrong — not tricky.
 - Short answers need only 1-2 sentences.
 - Fill-in-the-blank should have obvious answers directly from the text.
+- Assertion-Reason: both statements should be independently verifiable
+  facts straight from the text; avoid testing whether R "explains" A.
 - Avoid inference, calculation, or multi-step reasoning entirely.
 - Verbs to use: define, list, state, name, identify, recall, label.""",
 
@@ -658,6 +660,8 @@ DIFFICULTY_GUIDANCE = {
 - MCQ distractors must be plausible — students need real understanding to rule them out.
 - Short answers need 3-5 sentences with explanation or an example.
 - Include at least one calculation or step-by-step problem where subject allows.
+- Assertion-Reason: both statements true, but mix in cases where R does
+  NOT correctly explain A even though both are individually true.
 - Verbs to use: explain, compare, classify, solve, demonstrate, differentiate, calculate.""",
 
     "hard": """DIFFICULTY — HARD (Bloom's Level 5-6: Evaluate & Create)
@@ -666,6 +670,9 @@ DIFFICULTY_GUIDANCE = {
 - Short/long answers must require multi-step reasoning, inference from data, or real-world application.
 - Include scenario-based or case-study style questions.
 - Require linking concepts across sections or chapters where possible.
+- Assertion-Reason: use all four outcomes (A/B/C/D) across the set, and
+  favor cases where spotting a FALSE reason or a non-explanatory true
+  reason requires genuine conceptual understanding, not just recall.
 - Verbs to use: evaluate, justify, predict, design, critique, infer, hypothesize, analyse.""",
 
     "mixed": """DIFFICULTY — MIXED (all Bloom's levels)
@@ -697,6 +704,21 @@ lower-confidence retrieval on the question text alone):
   "explanation" = 1-2 sentences grounded in the CONTEXT.
 - For "fillblank": "answer" = the exact word/phrase for each blank, in
   order, comma-separated if there are multiple blanks.
+- For "assertreason": write "assertion" (statement A) and "reason"
+  (statement R) as SEPARATE fields, both grounded in the CONTEXT. Do NOT
+  put them in "text". "answer" = just the correct option letter (A-D),
+  chosen from the FIXED four options below (do not invent your own options
+  or reword them):
+    A. Both A and R are true and R is the correct explanation of A.
+    B. Both A and R are true but R is NOT the correct explanation of A.
+    C. A is true but R is false.
+    D. A is false but R is true.
+  "explanation" = 1-2 sentences grounded in the CONTEXT justifying both
+  the truth value of A, the truth value of R, and (if both true) whether R
+  actually explains A -- this is the part students get wrong, so be explicit.
+  Good assertion-reason pairs test whether R is a *correct* explanation of
+  A even when both statements are independently true (i.e. favor option B
+  some of the time, not only A/C/D) -- don't default to always-A.
 - For "short" / "long": "answer" = a model answer grounded in the CONTEXT,
   as many sentences/steps as the question warrants.
 - If the question involves any arithmetic, algebra, or numeric result,
@@ -742,6 +764,13 @@ STRICT JSON OUTPUT — return ONLY this JSON object, no markdown fences, no prea
           "type": "long",
           "text": "Essay or long answer question",
           "answer": "The full model answer, grounded in the context."
+        }},
+        {{
+          "type": "assertreason",
+          "assertion": "Statement A here",
+          "reason": "Statement R here",
+          "answer": "B",
+          "explanation": "Why A is true/false, why R is true/false, and whether R explains A."
         }}
       ]
     }}
@@ -752,6 +781,9 @@ HARD RULES — violating any makes output invalid:
 - Group questions by type into separate sections
 - EVERY question object MUST include a non-empty "answer" field as described above
 - MCQ must have exactly 4 options labeled A–D; exactly one must be correct
+- Assertion-Reason questions use "assertion"/"reason" fields, NEVER "text"
+  or "options" -- the four options are fixed and rendered by the frontend,
+  not written by you
 - Fill-in-the-blank must place ___ in the sentence for each blank
 - Questions must be grounded in the CONTEXT below
 - SILENT TOOL USE: your entire visible output, from the very first character
@@ -795,6 +827,7 @@ QTYPE_SECTION_NAMES = {
     "truefalse": "True or False",
     "fillblank": "Fill in the Blanks",
     "long":      "Long Answer / Essay Questions",
+    "assertreason": "Assertion-Reason Questions",
 }
 
 
@@ -875,6 +908,7 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
         "long":      {"passage", "long_sentence"},
         "mcq":       {"short_sentence", "long_sentence", "passage"},
         "truefalse": {"short_sentence", "long_sentence"},
+        "assertreason": {"short_sentence", "long_sentence"},
     }
 
     _LANG_SUBJECTS = {"english", "hindi", "kannada", "tamil", "sanskrit"}
@@ -1056,7 +1090,8 @@ async def worksheet_stream(req: WorksheetRequest) -> AsyncGenerator[str, None]:
 
     qtype_labels = {
         "mcq":"Multiple Choice","short":"Short Answer",
-        "truefalse":"True/False","fillblank":"Fill in the Blank","long":"Long Answer/Essay"
+        "truefalse":"True/False","fillblank":"Fill in the Blank","long":"Long Answer/Essay",
+        "assertreason":"Assertion-Reason"
     }
 
     prompt = WORKSHEET_PROMPT.format(
@@ -1339,6 +1374,7 @@ async def extract_questions(
 
     try:
         text = _extract_pdf_text(tmp_path)
+        print("extracted text length:", len(text))
 
         if not text.strip():
             raise HTTPException(422, "Could not extract text from PDF")
@@ -1353,7 +1389,7 @@ PAPER:
 
         from langchain_core.messages import HumanMessage
         response = await get_rag_chain().llm.ainvoke([HumanMessage(content=extraction_prompt)])
-
+        print("LLM extraction response length:", len(response.content))
         if not response.content or not response.content.strip():
             # Distinguish "provider returned nothing" (rate-limit/error) from
             # a genuine parse failure -- otherwise this falls through to the
@@ -1376,8 +1412,10 @@ PAPER:
         return {"questions":valid,"total":len(valid)}
 
     except json.JSONDecodeError:
+        print("JSON decode error during question extraction")
         raise HTTPException(422, "Could not parse questions — try a cleaner PDF")
     except Exception as e:
+        print("Error during question extraction:", e)
         raise HTTPException(500, str(e))
     finally:
         os.unlink(tmp_path)
